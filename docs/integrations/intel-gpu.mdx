@@ -1,0 +1,142 @@
+---
+title: 'Monitor Intel GPUs using OpenTelemetry'
+description: 'Monitor Intel GPU hardware with OpenTelemetry, capturing temperature, power draw, energy use, and clock frequency via the Linux i915/Xe kernel driver.'
+sidebarTitle: 'Intel GPUs'
+---
+
+import IntegrationMethods from '/snippets/integration-methods.mdx';
+
+Shield360 uses OpenTelemetry to help you monitor Intel GPUs. This includes tracking GPU metrics like temperature, power consumption, energy usage, and clock frequency via the Linux i915/Xe kernel driver.
+
+<Note>
+Intel GPU support requires Linux with the **i915** or **Xe** kernel driver (kernel 5.10+). Metrics are read directly from the kernel's sysfs/hwmon interface - no additional software or libraries are required. Utilization and memory metrics are not available via this interface; use [Intel GPU Top](https://github.com/intel/igt-gpu-tools) or [XPUManager](https://github.com/intel/xpumanager) for those.
+</Note>
+
+## Collected Metrics
+
+| Metric | Description | Requirement |
+|---|---|---|
+| `hw.temperature` | Die temperature | hwmon `temp1_input` |
+| `hw.power` | Current power draw (W) | hwmon `power1_average` |
+| `hw.power.limit` | Power cap (W) | hwmon `power1_max` |
+| `hw.energy` | Cumulative energy (J) | hwmon `energy1_input` |
+| `hw.gpu.speed` | Graphics clock (Hz; `clock_domain=graphics`) | DRM `gt_cur_freq_mhz` |
+| `hw.fan.speed` | Fan speed (RPM) | hwmon `fan1_input`, kernel 6.16+ |
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Using the SDK" href="#using-the-sdk" icon="file-code">
+    Collect and send GPU performance metrics directly from your application to an OpenTelemetry endpoint.
+  </Card>
+  <Card title="Using the Collector" href="#using-the-collector" icon="robot">
+    Install the OpenTelemetry GPU Collector as a Docker container to collect and send GPU performance metrics to an OpenTelemetry endpoint.
+  </Card>
+</CardGroup>
+
+
+<AccordionGroup>
+  <Accordion title="Using the SDK">
+    <Steps>
+      <Step title="Install Shield360">
+        Open your command line or terminal and run:
+        ```shell
+        pip install shield360
+        ```
+      </Step>
+      <IntegrationMethods />
+    </Steps>
+  </Accordion>
+  <Accordion title="Using the Collector">
+  <Steps>
+    <Step title="Pull `otel-gpu-collector` Docker Image">
+
+        You can quickly start using the OTel GPU Collector by pulling the Docker image:
+
+        ```sh
+        docker pull ghcr.io/thinkfleetai/otel-gpu-collector:latest
+        ```
+     </Step>
+     <Step title="Run `otel-gpu-collector` Docker container">
+
+        Here's a quick example showing how to run the container with the required environment variables.
+
+        For Intel GPUs, pass the DRM device into the container using `--device`:
+
+        ```sh
+        docker run \
+            --device /dev/dri:/dev/dri \
+            --pid=host \
+            -e OTEL_SERVICE_NAME='my-app' \
+            -e OTEL_RESOURCE_ATTRIBUTES='deployment.environment=staging' \
+            -e OTEL_EXPORTER_OTLP_ENDPOINT="YOUR_OTEL_ENDPOINT" \
+            -e OTEL_EXPORTER_OTLP_HEADERS="YOUR_OTEL_HEADERS" \
+            ghcr.io/thinkfleetai/otel-gpu-collector:latest
+        ```
+
+        `--pid=host` is required for per-process GPU attribution (cmdline, PID, zombie state).
+
+        For more advanced configurations of the collector, visit the [OTel GPU Collector repository](https://github.com/ThinkfleetAI/Shield360/tree/main/opentelemetry-gpu-collector/).
+
+        **Note:** If you've deployed **Shield360** using [Docker Compose](https://github.com/ThinkfleetAI/Shield360/blob/main/docker-compose.yml), make sure to use the host's IP address or add OTel GPU Collector to the [Docker Compose](https://github.com/ThinkfleetAI/Shield360/blob/main/docker-compose.yml):
+
+        <AccordionGroup>
+          <Accordion title="Docker Compose: Add the following config under `services`">
+
+          ```yaml
+          otel-gpu-collector:
+            image: ghcr.io/thinkfleetai/otel-gpu-collector:latest
+            pid: host
+            environment:
+              OTEL_SERVICE_NAME: 'my-app'
+              OTEL_RESOURCE_ATTRIBUTES: 'deployment.environment=staging'
+              OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
+            devices:
+              - /dev/dri:/dev/dri
+            depends_on:
+              - otel-collector
+            restart: always
+          ```
+
+          </Accordion>
+          <Accordion title="Host IP: Use the Host IP to connect to OTel Collector">
+
+          ```sh
+          OTEL_EXPORTER_OTLP_ENDPOINT="http://192.168.10.15:4318"
+          ```
+
+          </Accordion>
+        </AccordionGroup>
+        ### Environment Variables
+
+        OTel GPU Collector uses standard OpenTelemetry environment variables for configuration:
+
+        | Environment Variable              | Description                                                   | Default Value           |
+        |-----------------------------------|---------------------------------------------------------------|-------------------------|
+        | `OTEL_SERVICE_NAME`               | Service/application name attached to all metrics              | `default`               |
+        | `OTEL_RESOURCE_ATTRIBUTES`        | Resource attributes, e.g. `deployment.environment=production` | `deployment.environment=default` |
+        | `OTEL_EXPORTER_OTLP_ENDPOINT`     | OpenTelemetry OTLP endpoint URL                               | (required)              |
+        | `OTEL_EXPORTER_OTLP_HEADERS`      | Headers for authenticating with the OTLP endpoint             | Ignore if using Shield360 |
+        | `OTEL_METRIC_EXPORT_INTERVAL`     | Metric polling interval in milliseconds                       | `10000`                 |
+      </Step>
+    </Steps>
+  </Accordion>
+</AccordionGroup>
+
+<Card title="Collected Metrics" href="/latest/shield360/observability/telemetry/metrics" icon='table'>
+Details on the types of metrics collected and their descriptions.
+</Card>
+
+---
+
+<CardGroup cols={3}>
+  <Card title="Quickstart: LLM Observability" href="/latest/sdk/quickstart-ai-observability" icon='bolt'>
+    Production-ready AI monitoring setup in 2 simple steps with zero code changes
+  </Card>
+  <Card title="Configuration" href="/latest/sdk/configuration" icon='bolt'>
+    Configure the Shield360 SDK according to your requirements.
+  </Card>
+  <Card title="Destinations" href="/latest/sdk/destinations/overview" icon='link'>
+    Send telemetry to Datadog, Grafana, New Relic, and other observability stacks
+  </Card>
+</CardGroup>

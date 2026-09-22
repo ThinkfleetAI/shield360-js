@@ -1,0 +1,58 @@
+name: Release
+
+# Publishes `shield360` to npm.
+#
+# This file is generated. It lives in ThinkfleetAI/Shield360 as
+# .github/mirror-workflows/typescript.yml and is written here by the mirror
+# sync, so edit it there.
+#
+# The release runs here rather than in Shield360 because npm has not generated
+# provenance from a private source repository since 2023. This repository is
+# public, so `--provenance` produces an attestation customers can verify.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish / npm
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      # Required for npm provenance.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # The tag is what a person types. Refuse to publish a version the tag
+      # does not actually name, rather than shipping a surprise to npm.
+      - name: Verify the tag matches the package version
+        if: github.ref_type == 'tag'
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          test "$(node -p "require('./package.json').version")" = "$VERSION"
+          test "$(node -p "require('./package-lock.json').version")" = "$VERSION"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "$VERSION"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20.x'
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test
+
+      - name: Publish
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
