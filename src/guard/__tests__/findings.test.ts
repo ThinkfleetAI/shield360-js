@@ -1,7 +1,7 @@
 import { createHmac } from 'crypto';
 import { PII } from '../pii';
 import { GuardPhase } from '../base';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { fingerprint, mask, setFingerprintKey, token } from '../findings';
 
@@ -27,7 +27,11 @@ describe('findings', () => {
   });
 
   it('matches the shared token vectors', () => {
-    const file = JSON.parse(readFileSync(join(__dirname, '../../../../guard-core/testdata/tokens.json'), 'utf8'));
+    // The vectors live beside this SDK in the monorepo (sdk/guard-core) and inside the SDK's public mirror (guard-core/).
+    const candidates = [join(__dirname, '../../../../guard-core/testdata/tokens.json'), join(__dirname, '../../../guard-core/testdata/tokens.json')];
+    const path = candidates.find((p) => existsSync(p));
+    if (!path) throw new Error(`shared token vectors not found at ${candidates.join(' or ')}`);
+    const file = JSON.parse(readFileSync(path, 'utf8'));
     for (const v of file.cases) expect(token(v.kind, v.fingerprint)).toBe(v.token);
   });
 

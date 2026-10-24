@@ -1,4 +1,5 @@
-import { resolve } from 'path';
+import { dirname, relative, resolve } from 'path';
+import { existsSync } from 'fs';
 import { pathToFileURL } from 'url';
 import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
@@ -13,7 +14,17 @@ import {
 } from '../otel/code-location';
 
 const GEN_AI = { 'gen_ai.operation.name': 'chat' };
-const THIS_FILE = 'sdk/typescript/src/__tests__/code-location.test.ts';
+/** This file as the processor reports it: relative to the repository root, which is the monorepo here and the SDK's own root in its public mirror. */
+function gitRoot(from: string): string {
+  let dir = from;
+  while (!existsSync(resolve(dir, '.git'))) {
+    const parent = dirname(dir);
+    if (parent === dir) return from;
+    dir = parent;
+  }
+  return dir;
+}
+const THIS_FILE = relative(gitRoot(__dirname), __filename).split('\\').join('/');
 
 /** Line number of the caller's line, read the same way V8 reports it. */
 function callerLine(): number {
@@ -98,7 +109,7 @@ describe('CodeLocationSpanProcessor', () => {
     ].join('\n');
     expect(processor.findApplicationFrame(stack)).toEqual({
       functionName: 'Billing.summarise',
-      filePath: 'sdk/typescript/app/billing.ts',
+      filePath: relative(gitRoot(process.cwd()), appFile).split('\\').join('/'),
       lineNumber: 42,
     });
   });
