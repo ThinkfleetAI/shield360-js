@@ -155,6 +155,11 @@ export abstract class Guard {
     return this._action;
   }
 
+  /** The most characters this guard reads; 0 means all of them. */
+  get maxScanLength(): number {
+    return this._maxScanLength;
+  }
+
   supportsPhase(phase: GuardPhase): boolean {
     return this.phases.includes(phase);
   }

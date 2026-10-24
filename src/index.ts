@@ -24,6 +24,8 @@ import GpuMetricsCollector from './instrumentation/gpu';
 import SemanticConvention from './semantic-convention';
 import { parseBoolEnv } from './otel/utils';
 import { setupAutoGuards } from './guard/integration';
+// Shield Protect: enforcement, kept apart from tracing.
+import { ProtectReadinessError, resolveProtect, setProtectState } from './protect/mode';
 import { configureGuardReports } from './guard/report';
 import { PII } from './guard/pii';
 import { PromptInjection } from './guard/prompt-injection';
@@ -33,6 +35,9 @@ import { TopicRestriction } from './guard/topic-restriction';
 import { Schema } from './guard/schema';
 import { Custom } from './guard/custom';
 import { Pipeline } from './guard/pipeline';
+import { parseOtlpHeaders, resolveDestination } from './destination';
+import { resolveCaptureCodeLocation } from './otel/code-location';
+import { resolveBuildAttributes } from './otel/build-info';
 import {
   Guard,
   GuardAction,
@@ -54,27 +59,26 @@ function resolveOptions(options?: Shield360Options): ResolvedOptions {
   const environment = o.environment ?? DEFAULT_ENVIRONMENT;
   const applicationName = o.applicationName ?? DEFAULT_APPLICATION_NAME;
 
+  const shield360ApiKey = o.shield360ApiKey ?? process.env.SHIELD360_API_KEY ?? undefined;
+  const shield360Url = o.shield360Url ?? process.env.SHIELD360_URL ?? undefined;
+
   const rawEndpoint =
     o.otlpEndpoint ??
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT ??
     undefined;
 
-  const otlpEndpoint = rawEndpoint
-    ? rawEndpoint.replace(/\/v1\/traces$/, '')
-    : undefined;
-
-  let otlpHeaders = o.otlpHeaders ?? undefined;
-  if (!otlpHeaders && process.env.OTEL_EXPORTER_OTLP_HEADERS) {
-    otlpHeaders = process.env.OTEL_EXPORTER_OTLP_HEADERS.split(',').reduce(
-      (acc: Record<string, string>, item: string) => {
-        const keyVal = item.split('=');
-        acc[keyVal[0]] = keyVal[1];
-        return acc;
-      },
-      {} as Record<string, string>
-    );
+  let givenHeaders = o.otlpHeaders ?? undefined;
+  if (!givenHeaders && process.env.OTEL_EXPORTER_OTLP_HEADERS) {
+    givenHeaders = parseOtlpHeaders(process.env.OTEL_EXPORTER_OTLP_HEADERS);
   }
-  if (!otlpHeaders) otlpHeaders = {};
+
+  // With no OTLP endpoint, a Shield360 URL and API key are the destination.
+  const { otlpEndpoint, otlpHeaders } = resolveDestination({
+    otlpEndpoint: rawEndpoint,
+    otlpHeaders: givenHeaders,
+    shield360Url,
+    shield360ApiKey,
+  });
 
   let disableBatch = o.disableBatch ?? undefined;
   const envDisableBatch = parseBoolEnv('SHIELD360_DISABLE_BATCH');
@@ -84,8 +88,11 @@ function resolveOptions(options?: Shield360Options): ResolvedOptions {
 
   let captureMessageContent = o.captureMessageContent ?? undefined;
   const envCapture = parseBoolEnv('OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT');
+  // Prompt and completion text is captured only when asked for (the option
+  // or OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true): a Shield360
+  // organisation stores no content unless it opts in, so none is sent by default.
   if (captureMessageContent === undefined) {
-    captureMessageContent = envCapture ?? true;
+    captureMessageContent = envCapture ?? false;
   }
 
   let disableMetrics = o.disableMetrics ?? undefined;
@@ -106,9 +113,6 @@ function resolveOptions(options?: Shield360Options): ResolvedOptions {
     collectGpuStats = envCollectGpuStats ?? false;
   }
 
-  const shield360ApiKey = o.shield360ApiKey ?? process.env.SHIELD360_API_KEY ?? undefined;
-  const shield360Url = o.shield360Url ?? process.env.SHIELD360_URL ?? undefined;
-
   return {
     environment,
     applicationName,
@@ -128,7 +132,11 @@ function resolveOptions(options?: Shield360Options): ResolvedOptions {
     shield360Url,
     guards: o.guards,
     guardFailOpen: o.guardFailOpen ?? true,
+    protect: resolveProtect(o.protect),
     collectGpuStats,
+    captureCodeLocation: resolveCaptureCodeLocation(o.captureCodeLocation),
+    codeRoot: o.codeRoot,
+    serviceVersion: o.serviceVersion,
   };
 }
 
@@ -188,6 +196,7 @@ class Shield360 extends BaseShield360 {
       this.options = resolved;
 
       this.resource = resourceFromAttributes({
+        ...resolveBuildAttributes({ serviceVersion: resolved.serviceVersion }),
         [ATTR_SERVICE_NAME]: resolved.applicationName,
         [SemanticConvention.ATTR_DEPLOYMENT_ENVIRONMENT]: resolved.environment,
         [ATTR_TELEMETRY_SDK_NAME]: SDK_NAME,
@@ -237,7 +246,7 @@ class Shield360 extends BaseShield360 {
       );
 
       if (resolved.guards && resolved.guards.length > 0) {
-        setupAutoGuards(resolved.guards, resolved.guardFailOpen);
+        setupAutoGuards(resolved.guards, resolved.guardFailOpen, resolved.protect);
         // With a Shield360 URL and API key, what the guards stop is also
         // recorded in Shield360's Data protection report.
         configureGuardReports({
@@ -246,8 +255,16 @@ class Shield360 extends BaseShield360 {
           applicationName: resolved.applicationName,
           environment: resolved.environment,
         });
+      } else if (resolved.protect.mode === 'enforced' && resolved.protect.required.length) {
+        // Shield Protect: enforced mode that names required providers but has no guards is not protected startup.
+        setProtectState({ mode: resolved.protect.mode, wrapped: [], missing: resolved.protect.required });
+        throw new ProtectReadinessError(resolved.protect.required, 'Shield360 Protect: enforced mode requires guards; pass guards to init().');
+      } else {
+        setProtectState({ mode: resolved.protect.mode, wrapped: [], missing: [] });
       }
     } catch (e) {
+      // Shield Protect: a readiness failure in enforced mode stops startup; it is never logged and swallowed.
+      if (e instanceof ProtectReadinessError) throw e;
       console.error('Shield360 initialization failed:', e);
     }
   }
@@ -266,6 +283,10 @@ export { Shield360, usingAttributes, injectAdditionalAttributes, logScore };
 export { TracedSpan, startTrace, traceManual as trace };
 export type { Shield360Options } from './types';
 export type { LogScoreOptions } from './score';
+
+// Shield Protect re-exports: enforcement APIs, apart from the tracing ones above.
+export { protectTool, authorizeWithShield360, protectReadiness, ProtectDeniedError, ProtectReadinessError, ProtectError } from './protect';
+export type { ProtectMode, ProtectConfig, ProtectReadiness, ProtectToolOptions, AuthorizeTarget, AuthorizeAnswer } from './protect';
 
 // Guard re-exports for named imports: import { PII, Pipeline } from 'shield360'
 export {

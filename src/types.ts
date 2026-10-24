@@ -2,6 +2,7 @@ import { Resource } from '@opentelemetry/resources';
 import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { metrics } from '@opentelemetry/api';
 import type { Guard } from './guard/base';
+import type { ProtectConfig, ResolvedProtect } from './protect/mode';
 
 export type InstrumentationType = 'openai' | 'anthropic' | 'cohere' | 'groq' | 'mistral' | 'google-ai' | 'vertexai' | 'together' | 'ollama' | 'vllm' | 'vercel-ai' | 'langchain' | 'langgraph' | 'pinecone' | 'bedrock' | 'llamaindex' | 'huggingface' | 'replicate' | 'chroma' | 'qdrant' | 'milvus' | 'astra' | 'azure-ai-inference' | 'openai-agents' | 'strands' | 'google-adk' | 'claude-agent-sdk' | 'cursor-sdk' | 'ai21' | 'gradient' | 'browser-use' | 'mcp' | 'mem0' | 'elevenlabs' | 'assemblyai' | 'transformers' | 'pg' | 'firecrawl' | 'letta';
 
@@ -46,6 +47,9 @@ export interface Shield360ConfigInterface {
  *   Python: max_content_length   → JS: maxContentLength
  *   Python: custom_span_attributes → JS: customSpanAttributes
  *   Python: collect_gpu_stats     → JS: collectGpuStats
+ *   Python: capture_code_location → JS: captureCodeLocation
+ *   Python: code_root             → JS: codeRoot
+ *   Python: service_version       → JS: serviceVersion
  */
 export type Shield360Options = {
   environment?: string;
@@ -66,7 +70,21 @@ export type Shield360Options = {
   shield360Url?: string;
   guards?: Guard[];
   guardFailOpen?: boolean;
+  /**
+   * Shield Protect: the enforcement mode (observe | warn | enforced; env
+   * SHIELD360_PROTECT_MODE can raise it, never lower it) and the provider
+   * packages that must be wrapped for protected startup (env
+   * SHIELD360_PROTECT_REQUIRED adds to the list). In enforced mode, init()
+   * throws ProtectReadinessError instead of starting unguarded.
+   */
+  protect?: ProtectConfig;
   collectGpuStats?: boolean;
+  /** Add code.* call-site attributes to GenAI spans (default true; env SHIELD360_CAPTURE_CODE_LOCATION). */
+  captureCodeLocation?: boolean;
+  /** Root stripped from code.file.path (env SHIELD360_CODE_ROOT). */
+  codeRoot?: string;
+  /** service.version resource attribute (env SHIELD360_SERVICE_VERSION). */
+  serviceVersion?: string;
 };
 
 /**
@@ -91,7 +109,11 @@ export interface ResolvedOptions {
   shield360Url?: string;
   guards?: Guard[];
   guardFailOpen: boolean;
+  protect: ResolvedProtect;
   collectGpuStats: boolean;
+  captureCodeLocation: boolean;
+  codeRoot?: string;
+  serviceVersion?: string;
 }
 
 export type SetupTracerOptions = ResolvedOptions & {

@@ -106,7 +106,8 @@ Pass a `Config` struct to `shield360.Init()`:
 | `DisableTracing` | - | Disable trace collection | `false` |
 | `DisableMetrics` | - | Disable metrics collection | `false` |
 | `DisableBatch` | - | Disable batch export (useful for testing) | `false` |
-| `DisableCaptureMessageContent` | - | Omit prompt/completion text from spans | `false` |
+| `CaptureMessageContent` | `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT` | Record prompt/completion text in spans (stored only if [Data retention](https://shield360.ai) allows it) | `false` |
+| `DisableCaptureMessageContent` | - | Never record prompt/completion text; wins over the above | `false` |
 | `DetailedTracing` | - | Enable component-level tracing detail | `false` |
 | `DisablePricingFetch` | - | Skip fetching remote pricing data | `false` |
 | `PricingEndpoint` | - | URL for custom pricing JSON | built-in |

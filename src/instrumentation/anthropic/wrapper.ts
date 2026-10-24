@@ -37,10 +37,26 @@ export default class AnthropicWrapper extends BaseWrapper {
   static serverAddress = 'api.anthropic.com';
   static serverPort = 443;
 
-  static _patchMessageCreate(tracer: Tracer): any {
-    const genAIEndpoint = 'anthropic.resources.messages';
+  /**
+   * The wrapper for `create` on a Messages resource.
+   *
+   * `genAIEndpoint` names which resource was patched, because the SDK has two
+   * with the same shape: `client.messages` and `client.beta.messages`. The
+   * request and response formats are identical, so one wrapper serves both;
+   * only the endpoint attribute tells them apart.
+   */
+  static _patchMessageCreate(
+    tracer: Tracer,
+    genAIEndpoint: string = 'anthropic.resources.messages'
+  ): any {
     return (originalMethod: (...args: any[]) => any) => {
-      return async function (this: any, ...args: any[]) {
+      // SHIELD: not `async`. `create` returns the SDK's APIPromise, which
+      // carries `.withResponse()` and `.asResponse()`; the SDK's own helpers
+      // call them (`messages.stream()`, `beta.messages.toolRunner({ stream })`).
+      // An async wrapper hands back a plain Promise instead, and those helpers
+      // then throw "withResponse is not a function". The instrumentation is
+      // attached through `_thenUnwrap`, which keeps the APIPromise intact.
+      return function (this: any, ...args: any[]) {
         if (isFrameworkLlmActive()) return originalMethod.apply(this, args);
         const requestModel = args[0]?.model || 'claude-3-5-sonnet-latest';
         const spanName = `${SemanticConvention.GEN_AI_OPERATION_TYPE_CHAT} ${requestModel}`;
@@ -49,40 +65,58 @@ export default class AnthropicWrapper extends BaseWrapper {
           kind: SpanKind.CLIENT,
           attributes: spanCreationAttrs(SemanticConvention.GEN_AI_OPERATION_TYPE_CHAT, requestModel),
         }, effectiveCtx);
-        return context
-          .with(trace.setSpan(effectiveCtx, span), async () => {
-            return originalMethod.apply(this, args);
-          })
-          .then((response: any) => {
-            const { stream = false } = args[0];
 
-            if (stream) {
-              return Shield360Helper.createStreamProxy(
-                response,
-                AnthropicWrapper._messageCreateGenerator({
-                  args,
-                  genAIEndpoint,
-                  response,
-                  span,
-                })
-              );
-            }
-
-            return AnthropicWrapper._messageCreate({ args, genAIEndpoint, response, span });
-          })
-          .catch((e: any) => {
-            Shield360Helper.handleException(span, e);
-            BaseWrapper.recordMetrics(span, {
-              genAIEndpoint,
-              model: requestModel,
-              aiSystem: AnthropicWrapper.aiSystem,
-              serverAddress: AnthropicWrapper.serverAddress,
-              serverPort: AnthropicWrapper.serverPort,
-              errorType: e?.constructor?.name || '_OTHER',
-            });
-            span.end();
-            throw e;
+        let ended = false;
+        const fail = (e: any) => {
+          if (ended) return;
+          ended = true;
+          Shield360Helper.handleException(span, e);
+          BaseWrapper.recordMetrics(span, {
+            genAIEndpoint,
+            model: requestModel,
+            aiSystem: AnthropicWrapper.aiSystem,
+            serverAddress: AnthropicWrapper.serverAddress,
+            serverPort: AnthropicWrapper.serverPort,
+            errorType: e?.constructor?.name || '_OTHER',
           });
+          span.end();
+        };
+        const instrument = (response: any) => {
+          ended = true;
+          const { stream = false } = args[0] || {};
+          if (stream) {
+            return Shield360Helper.createStreamProxy(
+              response,
+              AnthropicWrapper._messageCreateGenerator({ args, genAIEndpoint, response, span })
+            );
+          }
+          return AnthropicWrapper._messageCreate({ args, genAIEndpoint, response, span });
+        };
+
+        let result: any;
+        try {
+          result = context.with(trace.setSpan(effectiveCtx, span), () => originalMethod.apply(this, args));
+        } catch (e) {
+          fail(e);
+          throw e;
+        }
+
+        if (result && typeof result._thenUnwrap === 'function') {
+          // Observe a failed request without touching the body: parsing the
+          // original as well as the unwrapped promise reads the body twice.
+          // `asResponse()` waits only for the response, which is where HTTP
+          // and network errors reject.
+          if (typeof result.asResponse === 'function') {
+            result.asResponse().then(undefined, fail);
+          }
+          return result._thenUnwrap((response: any) => instrument(response));
+        }
+
+        // An SDK version without APIPromise: a plain promise is all it returns.
+        return Promise.resolve(result).then(instrument, (e: any) => {
+          fail(e);
+          throw e;
+        });
       };
     };
   }

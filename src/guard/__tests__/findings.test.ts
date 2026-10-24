@@ -1,7 +1,9 @@
 import { createHmac } from 'crypto';
 import { PII } from '../pii';
 import { GuardPhase } from '../base';
-import { fingerprint, mask, setFingerprintKey } from '../findings';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { fingerprint, mask, setFingerprintKey, token } from '../findings';
 
 // Test values are assembled at run time so secret scanners don't flag this file.
 const SSN = '123-45-' + '6789';
@@ -11,12 +13,22 @@ const OPENAI = 'sk-' + 'proj-' + 'abcdefghijklmnopqrstuvwxyz0123';
 afterEach(() => setFingerprintKey(null));
 
 describe('findings', () => {
-  it('masks enough to recognise, never enough to use', () => {
-    expect(mask('ssn', SSN)).toBe('***-**-6789');
-    expect(mask('credit-card', CARD)).toBe('•••• 1111');
-    const key = mask('openai-api-key', OPENAI);
-    expect(key.startsWith('sk-proj-') && key.endsWith('0123') && !key.includes('abcdef')).toBe(true);
-    expect(mask('email', 'ana@acme.test')).toBe('a***@acme.test');
+  it('masks to the kind alone without a key: no character of the value', () => {
+    expect(mask('ssn', SSN)).toBe('[ssn]');
+    expect(mask('credit-card', CARD)).toBe('[payment_card]');
+    expect(mask('openai-api-key', OPENAI)).toBe('[api_key]');
+    expect(mask('email', 'ana@acme.test')).toBe('[email]');
+  });
+
+  it('masks to the kind and the start of the keyed fingerprint with a key', () => {
+    setFingerprintKey('org-secret');
+    const fp = fingerprint('openai-api-key', OPENAI);
+    expect(mask('openai-api-key', OPENAI)).toBe(`[api_key:fp_${fp.slice(0, 8)}]`);
+  });
+
+  it('matches the shared token vectors', () => {
+    const file = JSON.parse(readFileSync(join(__dirname, '../../../../guard-core/testdata/tokens.json'), 'utf8'));
+    for (const v of file.cases) expect(token(v.kind, v.fingerprint)).toBe(v.token);
   });
 
   it('fingerprints only with a key, the same way as the CLI and Python', () => {
@@ -33,7 +45,7 @@ describe('findings', () => {
     setFingerprintKey('org-secret');
     const r = new PII({ action: 'deny' }).run(`SSN ${SSN}, card ${CARD}`, GuardPhase.PREFLIGHT);
     const masked = Object.fromEntries((r.findings || []).map((f) => [f.kind, f.masked]));
-    expect(masked.ssn).toBe('***-**-6789');
+    expect(masked.ssn).toBe(`[ssn:fp_${fingerprint('ssn', SSN).slice(0, 8)}]`);
     expect(JSON.stringify(r.findings)).not.toContain(SSN);
     expect(JSON.stringify(r.findings)).not.toContain(CARD);
   });
@@ -46,6 +58,9 @@ describe('findings made before the key arrives', () => {
     expect(early.fingerprint).toBeUndefined();
     expect(JSON.stringify(early)).not.toContain(SSN);
     setFingerprintKey('org-secret');
-    expect(completeFinding(early).fingerprint).toBe(fingerprint('ssn', SSN));
+    expect(early.masked).toBe('[ssn]');
+    const done = completeFinding(early);
+    expect(done.fingerprint).toBe(fingerprint('ssn', SSN));
+    expect(done.masked).toBe(`[ssn:fp_${done.fingerprint!.slice(0, 8)}]`);
   });
 });

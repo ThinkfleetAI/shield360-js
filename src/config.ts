@@ -26,7 +26,7 @@ export default class Shield360Config {
     otlpEndpoint,
     otlpHeaders,
     disableBatch = false,
-    captureMessageContent = true,
+    captureMessageContent = false,
     pricingJson,
     disableMetrics = false,
     disableEvents = false,

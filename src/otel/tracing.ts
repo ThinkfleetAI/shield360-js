@@ -6,12 +6,14 @@ import {
   ConsoleSpanExporter,
   SimpleSpanProcessor,
   SpanExporter,
+  SpanProcessor,
 } from '@opentelemetry/sdk-trace-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
 
 import Instrumentations from '../instrumentation';
 import Shield360Config from '../config';
 import { parseExporters } from './utils';
+import { CodeLocationSpanProcessor } from './code-location';
 
 let TRACER_SET = false;
 
@@ -32,6 +34,11 @@ export default class Tracing {
         if (isSDKProvider) {
           // Reuse existing SDK TracerProvider
           this.traceProvider = existingProvider as unknown as NodeTracerProvider;
+          if (options.captureCodeLocation) {
+            (existingProvider as any).addSpanProcessor(
+              new CodeLocationSpanProcessor({ codeRoot: options.codeRoot })
+            );
+          }
         } else {
           const spanProcessors = Tracing.buildSpanProcessors(options);
 
@@ -65,7 +72,10 @@ export default class Tracing {
   }
 
   private static buildSpanProcessors(options: SetupTracerOptions) {
-    const processors: (SimpleSpanProcessor | BatchSpanProcessor)[] = [];
+    const processors: SpanProcessor[] = [];
+    if (options.captureCodeLocation) {
+      processors.push(new CodeLocationSpanProcessor({ codeRoot: options.codeRoot }));
+    }
     const exporterList = parseExporters('OTEL_TRACES_EXPORTER');
 
     if (exporterList) {

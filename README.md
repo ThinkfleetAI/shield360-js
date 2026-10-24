@@ -195,11 +195,39 @@ Below is a detailed overview of the configuration options available, allowing yo
 | `otlpEndpoint`          | Specifies the OTLP endpoint for transmitting telemetry data.                         | `undefined`                                                             | No       |
 | `otlpHeaders`           | Defines headers for the OTLP exporter, useful for backends requiring authentication. | `undefined`                                                             | No       |
 | `disableBatch`          | A flag to disable batch span processing, favoring immediate dispatch.                | `true`                                                            | No       |
-| `traceContent`          | Enables tracing of content for deeper insights.                                      | `true`                                                             | No       |
+| `captureMessageContent` | Records prompt and completion text. Off unless set here or with `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`. | `false`                                                             | No       |
 | `disabledInstrumentations` | List of instrumentations to disable.                                                    | `undefined`                                                             | No       |
 | `instrumentations`        | Object of instrumentation modules for manual patching                                          | `undefined`                                                            | No       |
 | `pricingJson`           | URL or file path of the pricing JSON file.                                           | Bundled `pricing.json` | No       |
 | `collectGpuStats`       | Flag to enable or disable GPU metrics collection (NVIDIA via `nvidia-smi`, AMD via `rocm-smi`). | `false`                                                            | No       |
+| `captureCodeLocation`   | Adds the calling function, file and line to GenAI spans. Also `SHIELD360_CAPTURE_CODE_LOCATION=false`. | `true` | No |
+| `codeRoot`              | Directory stripped from reported file paths. Also `SHIELD360_CODE_ROOT`. | git root, then working directory | No |
+| `serviceVersion`        | Release recorded as the `service.version` resource attribute. Also `SHIELD360_SERVICE_VERSION`. | `undefined` | No |
+
+> **Message content is off by default.** Prompt and completion text is recorded only when you pass `captureMessageContent: true` (or set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`). Even then, Shield360 stores it only if your organisation's [Data retention](https://shield360.ai) setting allows it. Before this release the default was on.
+
+### Code location and build attributes
+
+Every GenAI span (one with `gen_ai.operation.name`) records where your code made the call:
+
+| Attribute | Value |
+| --- | --- |
+| `code.function.name` | Calling function, such as `BillingService.summarise`. Left out for anonymous functions. |
+| `code.file.path` | File path relative to `codeRoot`, the git root or the working directory. No home directory (yours or another user's) or CI workspace prefix is sent. |
+| `code.line.number` | Line of the call. |
+
+Frames inside Shield360, OpenTelemetry, `node_modules` and Node internals are skipped. Only names, paths and line numbers are recorded, never argument values or source text. Turn it off with `captureCodeLocation: false` or `SHIELD360_CAPTURE_CODE_LOCATION=false` (`0`, `no` and `off` also work); the init option wins over the environment variable.
+
+At startup Shield360 also adds these resource attributes, so costs and traces can be tied to a release:
+
+| Attribute | Sources, first match wins |
+| --- | --- |
+| `service.version` | `serviceVersion`, `SHIELD360_SERVICE_VERSION`, `OTEL_SERVICE_VERSION`, `OTEL_RESOURCE_ATTRIBUTES` |
+| `vcs.ref.head.revision` | `SHIELD360_GIT_COMMIT`, `OTEL_RESOURCE_ATTRIBUTES`, CI variables |
+| `vcs.repository.url.full` | `SHIELD360_GIT_REPOSITORY_URL`, `OTEL_RESOURCE_ATTRIBUTES`, CI variables |
+| `vcs.ref.head.name` | `SHIELD360_GIT_BRANCH`, `OTEL_RESOURCE_ATTRIBUTES`, CI variables |
+
+CI variables are read from GitHub Actions, GitLab CI, Vercel, Netlify, Render, Railway, Heroku, AWS CodeBuild, Buildkite, CircleCI, Bitbucket Pipelines, Azure Pipelines and Jenkins. An explicit `OTEL_RESOURCE_ATTRIBUTES` value beats CI auto-detection. Values from different providers are never mixed. Commit SHAs that are not 7 to 64 hex characters are dropped, and repository URLs are reduced to `https://host/owner/repo` with any credentials removed.
 
 ### Shield360 Prompt Hub - `Shield360.getPrompt()`
 

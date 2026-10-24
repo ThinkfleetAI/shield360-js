@@ -35,6 +35,22 @@ export class Pipeline {
     return [...this._guards];
   }
 
+  /** Whether any guard runs in `phase`. */
+  hasPhase(phase: GuardPhase): boolean {
+    return this._guards.some((g) => g.supportsPhase(phase));
+  }
+
+  /**
+   * The most characters every guard in the pipeline reads: the smallest
+   * positive maxScanLength, or 0 when every guard reads everything. Text
+   * past it is scanned in part by at least one guard; Shield Protect's
+   * enforced mode refuses such text instead.
+   */
+  scanBound(): number {
+    const bounds = this._guards.map((g) => g.maxScanLength).filter((n) => n > 0);
+    return bounds.length ? Math.min(...bounds) : 0;
+  }
+
   evaluate(text: string, phase: string = 'preflight'): PipelineResult {
     const validPhases = Object.values(GuardPhase) as string[];
     if (!validPhases.includes(phase)) {

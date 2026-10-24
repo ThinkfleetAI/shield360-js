@@ -23,8 +23,9 @@
  * Must stay in sync with: sdk/python/src/shield360/guard/_integration.py
  */
 
-import { Guard, GuardAction, GuardDeniedError } from './base';
+import { Guard, GuardAction, GuardDeniedError, GuardPhase } from './base';
 import { Pipeline } from './pipeline';
+import { ProtectDeniedError, ProtectReadinessError, refuses, setProtectState, type ResolvedProtect } from '../protect/mode';
 
 // ---------------------------------------------------------------------------
 // Provider-specific text extractors
@@ -32,18 +33,28 @@ import { Pipeline } from './pipeline';
 
 type Extractor = (arg: any) => string;
 
+/** The text in a message's content: a string, or the text parts of a list of blocks. */
+function contentText(content: unknown): string[] {
+  if (typeof content === 'string') return content ? [content] : [];
+  if (!Array.isArray(content)) return [];
+  const out: string[] = [];
+  for (const block of content) {
+    if (typeof block === 'string') out.push(block);
+    else if (block && typeof block === 'object' && typeof (block as any).text === 'string') out.push((block as any).text);
+  }
+  return out;
+}
+
 export function extractOpenAIInput(kwargs: Record<string, any>): string {
   const messages = kwargs.messages || kwargs.input || [];
-  if (typeof messages === 'string') return messages;
   const parts: string[] = [];
-  if (Array.isArray(messages)) {
+  // The Responses API's instructions are a system prompt: scanned like one.
+  if (typeof kwargs.instructions === 'string' && kwargs.instructions) parts.push(kwargs.instructions);
+  if (typeof messages === 'string') parts.push(messages);
+  else if (Array.isArray(messages)) {
     for (const m of messages) {
-      if (typeof m === 'object' && m !== null) {
-        const content = m.content ?? '';
-        if (typeof content === 'string') parts.push(content);
-      } else if (typeof m === 'string') {
-        parts.push(m);
-      }
+      if (typeof m === 'object' && m !== null) parts.push(...contentText(m.content));
+      else if (typeof m === 'string') parts.push(m);
     }
   }
   return parts.join(' ');
@@ -82,6 +93,8 @@ export function extractOpenAIOutput(response: any): string {
 export function extractAnthropicInput(kwargs: Record<string, any>): string {
   const messages = kwargs.messages || [];
   const parts: string[] = [];
+  // The system prompt is input too: a string, or text blocks.
+  parts.push(...contentText(kwargs.system));
   if (Array.isArray(messages)) {
     for (const m of messages) {
       if (typeof m === 'object' && m !== null) {
@@ -236,20 +249,55 @@ function redactMessages(pipeline: Pipeline, value: any, phase: string): any {
   });
 }
 
+/**
+ * Shield Protect: what a mode does with a pipeline result, and with a
+ * pipeline that failed. No mode (legacy): a DENY throws, as it always did.
+ * observe: recorded, the call goes on. warn: as observe, and logged.
+ * enforced: a DENY throws; a failed pipeline throws (fail closed), whatever
+ * failOpen says.
+ */
+function evaluateUnder(pipeline: Pipeline, text: string, phase: 'preflight' | 'postflight', protect?: ResolvedProtect) {
+  const mode = protect?.mode;
+  const bound = pipeline.scanBound();
+  if (refuses(mode) && bound > 0 && text.length > bound) {
+    throw new ProtectDeniedError('oversized', `Shield360 Protect refused the call: ${text.length} characters is more than its guards scan (${bound}); send less.`);
+  }
+  let result;
+  try {
+    result = pipeline.evaluate(text, phase);
+  } catch (e) {
+    if (refuses(mode)) {
+      throw new ProtectDeniedError('guard_failed', 'Shield360 Protect refused the call: a guard failed and enforced mode does not run unchecked calls.');
+    }
+    throw e;
+  }
+  if (result.action === GuardAction.DENY) {
+    if (mode === undefined || refuses(mode)) throw new GuardDeniedError(result);
+    if (mode === 'warn') console.warn(`[shield360] Protect (warn mode): the call would have been refused at ${phase}: ${result.explanation}`);
+    // observe / warn: recorded by the pipeline's own span event; the call goes on.
+    return { ...result, action: GuardAction.WARN };
+  }
+  return result;
+}
+
 /** @internal exported for tests */
 export function applyPreflight(
   pipeline: Pipeline,
   kwargs: Record<string, any>,
   extractInput: Extractor,
+  protect?: ResolvedProtect,
 ): Record<string, any> {
   const inputText = extractInput(kwargs);
   if (!inputText) return kwargs;
 
-  const result = pipeline.evaluate(inputText, 'preflight');
-
-  if (result.action === GuardAction.DENY) {
-    throw new GuardDeniedError(result);
+  // A streamed completion cannot be inspected after the fact. Enforced mode
+  // with postflight guards refuses it rather than let the response through
+  // unread; with preflight-only guards the stream is fine.
+  if (refuses(protect?.mode) && kwargs.stream === true && pipeline.hasPhase(GuardPhase.POSTFLIGHT)) {
+    throw new ProtectDeniedError('streaming', 'Shield360 Protect refused a streamed completion: postflight guards cannot inspect a stream. Call without stream, or configure preflight-only guards.');
   }
+
+  const result = evaluateUnder(pipeline, inputText, 'preflight', protect);
 
   if (result.action === GuardAction.REDACT && result.transformedText !== null) {
     for (const key of ['messages', 'input', 'prompt', 'text']) {
@@ -278,15 +326,12 @@ export function applyPostflight(
   pipeline: Pipeline,
   response: any,
   extractOutput: Extractor,
+  protect?: ResolvedProtect,
 ): any {
   const outputText = extractOutput(response);
   if (!outputText) return response;
 
-  const result = pipeline.evaluate(outputText, 'postflight');
-
-  if (result.action === GuardAction.DENY) {
-    throw new GuardDeniedError(result);
-  }
+  const result = evaluateUnder(pipeline, outputText, 'postflight', protect);
 
   if (result.action === GuardAction.REDACT && result.transformedText !== null) {
     try {
@@ -332,11 +377,38 @@ function resolveProto(moduleExports: any, protoPath: string[]): any {
 // Public entry point
 // ---------------------------------------------------------------------------
 
+export type AutoGuardReport = {
+  /** npm packages whose provider methods were wrapped. */
+  wrapped: string[];
+  /** Required packages that were not wrapped: not installed, or not resolvable from this module (an ESM-only resolution). */
+  missing: string[];
+};
+
+/**
+ * Wraps every installed provider the SDK knows. With Shield Protect in
+ * enforced mode the pipeline fails closed (failOpen is overridden, with a
+ * warning when it was set), and a package named in `required` that could
+ * not be wrapped throws ProtectReadinessError: protected startup fails
+ * rather than running unguarded.
+ *
+ * Supported module loading: CommonJS `require`, and ESM `import` of a
+ * provider whose package resolves to the same CommonJS build (openai and
+ * @anthropic-ai/sdk do under Node's default conditions). An ESM-only
+ * resolution loads a class this function never sees; name the package in
+ * `required` so enforced mode fails rather than silently not wrapping it,
+ * or use protectTool() which needs no patching.
+ */
 export function setupAutoGuards(
   guards: Guard[],
   failOpen = true,
-): void {
-  const pipeline = new Pipeline({ guards, failOpen });
+  protect?: ResolvedProtect,
+): AutoGuardReport {
+  let effectiveFailOpen = failOpen;
+  if (refuses(protect?.mode) && failOpen) {
+    console.warn('[shield360] Protect: enforced mode fails closed; guardFailOpen is ignored.');
+    effectiveFailOpen = false;
+  }
+  const pipeline = new Pipeline({ guards, failOpen: effectiveFailOpen });
 
   try {
     const Shield360Config = require('../config').default;
@@ -345,7 +417,7 @@ export function setupAutoGuards(
     // config not available
   }
 
-  let wrappedCount = 0;
+  const wrapped = new Set<string>();
   for (const { npmPackage, protoPath, methodName, extractInput, extractOutput } of GUARDED_METHODS) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -357,20 +429,26 @@ export function setupAutoGuards(
       proto[methodName] = async function (this: any, ...args: any[]) {
         let params = args[0] || {};
 
-        params = applyPreflight(pipeline, params, extractInput);
+        params = applyPreflight(pipeline, params, extractInput, protect);
         args[0] = params;
 
         const response = await original.apply(this, args);
 
-        return applyPostflight(pipeline, response, extractOutput);
+        return applyPostflight(pipeline, response, extractOutput, protect);
       };
-      wrappedCount++;
+      wrapped.add(npmPackage);
     } catch {
       // module not installed, skip silently
     }
   }
 
-  if (wrappedCount > 0) {
-    console.log(`[shield360] Auto-guards: wrapped ${wrappedCount}/${GUARDED_METHODS.length} provider methods`);
+  const missing = (protect?.required ?? []).filter((pkg) => !wrapped.has(pkg));
+  setProtectState({ mode: protect?.mode, wrapped: Array.from(wrapped), missing });
+  if (wrapped.size > 0) {
+    console.log(`[shield360] Auto-guards: wrapped ${wrapped.size} provider package(s): ${Array.from(wrapped).join(', ')}`);
   }
+  if (refuses(protect?.mode) && missing.length) {
+    throw new ProtectReadinessError(missing, `Shield360 Protect: enforced mode requires guards on ${missing.join(', ')}, which could not be wrapped (not installed, or not resolvable as CommonJS). Protected startup refused.`);
+  }
+  return { wrapped: Array.from(wrapped), missing };
 }

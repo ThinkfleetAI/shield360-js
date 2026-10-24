@@ -6,6 +6,8 @@ import { applyCustomSpanAttributes } from '../../helpers';
 import { SDK_NAME } from '../../constant';
 import SemanticConvention from '../../semantic-convention';
 import Metrics from '../../otel/metrics';
+// Shield Protect: a client's tools/call is checked before it is sent.
+import { checkMcpToolCall } from '../../protect/mcp';
 
 const MCP_SYSTEM = 'mcp';
 
@@ -391,7 +393,11 @@ function patchCallTool(tracer: Tracer, version: string): any {
       return wrapWithMCPSpan({
         tracer, spanName, spanKind: SpanKind.CLIENT, operationName: 'tools_call',
         ctx, version, toolName,
-        fn: () => originalMethod.apply(this, args),
+        fn: async () => {
+          // Shield Protect: the arguments are checked before the request leaves; a refusal never reaches the server.
+          checkMcpToolCall(toolName, args[0]?.arguments ?? args[1]);
+          return originalMethod.apply(this, args);
+        },
         onResponse: (span, response: any) => {
           if (response?.content && Shield360Config.captureMessageContent) {
             span.setAttribute(SemanticConvention.MCP_TOOL_RESULT, safeStringify(response.content) || '');

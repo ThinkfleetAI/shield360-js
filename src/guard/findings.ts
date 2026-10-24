@@ -1,6 +1,6 @@
 /**
  * What a reviewer may see of a sensitive value a guard found: its kind, a
- * masked form (the last four digits of an SSN, the prefix of an API key) and a
+ * token (`[api_key:fp_3f9c2a1b]`, see token()) and a
  * fingerprint that is the same every time the same value turns up, in this app
  * or anywhere else in the organisation. The value itself is never kept or
  * reported.
@@ -73,55 +73,28 @@ export function fingerprint(label: string, value: string): string {
   return createHmac('sha256', key).update(`${kind}:${normalise(kind, value)}`).digest('hex').slice(0, 16);
 }
 
-/** Enough of a value to recognise it, never enough to use it. */
+/** Hex characters of the fingerprint a token shows. */
+export const TOKEN_PRINT_LENGTH = 8;
+
+/**
+ * What is kept of a sensitive value: its kind and, when the organisation's key
+ * is known, the start of its keyed fingerprint — `[api_key:fp_3f9c2a1b]`, or
+ * `[api_key]` without a key. No character of the value is part of it: a key's
+ * prefix and last four or a card's last four help an attacker narrow a guess.
+ * Byte-compatible with guard-core's token() and the Go guard's Token().
+ */
+export function token(kind: string, fp = ''): string {
+  return fp.length >= TOKEN_PRINT_LENGTH && /^[0-9a-f]+$/.test(fp) ? `[${kind}:fp_${fp.slice(0, TOKEN_PRINT_LENGTH)}]` : `[${kind}]`;
+}
+
+/** The token for a value under the current key; never any character of it. */
 export function mask(label: string, value: string): string {
-  const v = value.trim();
-  const kind = canonicalKind(label);
-  switch (kind) {
-    case 'ssn':
-      return '***-**-' + digits(v).slice(-4);
-    case 'payment_card':
-      return '•••• ' + digits(v).slice(-4);
-    case 'phone-us':
-      return '***-***-' + digits(v).slice(-4);
-    case 'private_key':
-      return v;
-    case 'email': {
-      const at = v.indexOf('@');
-      return at > 0 ? v[0] + '***' + v.slice(at) : '***';
-    }
-    case 'ipv4': {
-      const parts = v.split('.');
-      return parts.length === 4 ? `${parts[0]}.${parts[1]}.x.x` : 'x.x.x.x';
-    }
-    case 'connection_string': {
-      const m = /^([a-z+]+:\/\/[^:/@\s]+:)[^@\s]*(@.*)?$/i.exec(v);
-      if (m) return m[1] + '****@' + (m[2] || '@').slice(1).split('/')[0];
-      return v.split('://')[0] + '://****';
-    }
-    case 'password': {
-      const i = v.search(/[:=]/);
-      const name = i > 0 ? v.slice(0, i).replace(/^[\s"']+|[\s"']+$/g, '') : '';
-      return name ? `${name} = ••••••••` : '••••••••';
-    }
-    case 'bearer-token':
-    case 'basic-auth':
-      return `${v.split(/\s+/)[0] || ''} …${v.slice(-4)}`;
-    default: {
-      // Keys and tokens: the public prefix names the service, the last four
-      // tell two keys apart.
-      let prefix = v.slice(0, 12);
-      const cut = Math.max(prefix.lastIndexOf('-'), prefix.lastIndexOf('_'));
-      prefix = cut >= 2 ? prefix.slice(0, cut + 1) : prefix.slice(0, 4);
-      if (v.length <= prefix.length + 4) return prefix + '…';
-      return prefix + '…' + v.slice(-4);
-    }
-  }
+  return token(canonicalKind(label), fingerprint(label, value));
 }
 
 export function makeFinding(label: string, value: string): Finding {
-  const f: Finding = { kind: label, masked: mask(label, value) };
   const fp = fingerprint(label, value);
+  const f: Finding = { kind: label, masked: token(canonicalKind(label), fp) };
   if (fp) f.fingerprint = fp;
   else awaitingKey.set(f, { label, value });
   return f;
@@ -135,7 +108,7 @@ export function completeFinding(f: Finding): Finding {
   const fp = fingerprint(pending.label, pending.value);
   if (!fp) return f;
   awaitingKey.delete(f);
-  return { ...f, fingerprint: fp };
+  return { ...f, masked: token(canonicalKind(pending.label), fp), fingerprint: fp };
 }
 
 /** Findings for `[label, value]` pairs, de-duplicated and capped. */

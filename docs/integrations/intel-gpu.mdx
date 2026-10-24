@@ -76,9 +76,9 @@ Intel GPU support requires Linux with the **i915** or **Xe** kernel driver (kern
 
         `--pid=host` is required for per-process GPU attribution (cmdline, PID, zombie state).
 
-        For more advanced configurations of the collector, visit the [OTel GPU Collector repository](https://github.com/ThinkfleetAI/Shield360/tree/main/opentelemetry-gpu-collector/).
+        For more advanced configurations of the collector, visit the [GPU Collector documentation](https://shield360.ai).
 
-        **Note:** If you've deployed **Shield360** using [Docker Compose](https://github.com/ThinkfleetAI/Shield360/blob/main/docker-compose.yml), make sure to use the host's IP address or add OTel GPU Collector to the [Docker Compose](https://github.com/ThinkfleetAI/Shield360/blob/main/docker-compose.yml):
+        **Note:** If you've deployed **Shield360** using Docker Compose (`docker-compose.yml` in the Shield360 distribution), make sure to use the host's IP address or add OTel GPU Collector to the Docker Compose (`docker-compose.yml` in the Shield360 distribution):
 
         <AccordionGroup>
           <Accordion title="Docker Compose: Add the following config under `services`">

@@ -48,21 +48,19 @@ For example:
 export OTEL_RESOURCE_ATTRIBUTES="service.instance.id=YOUR_SERVICE_ID,k8s.pod.name=K8S_POD_NAME,k8s.namespace.name=K8S_NAMESPACE,k8s.node.name=K8S_NODE_NAME"
 ```
 
-## Disable Tracing of Content
+## Tracing of content
 
-By default, Shield360 adds the prompts and completions to Trace span attributes.
-
-However, you may want to disable this logging for privacy reasons, as they may contain highly sensitive data from your users. You may also simply want to reduce the size of your traces.
-
-Example:
+By default, Shield360 does **not** add prompts and completions to span attributes: they may contain highly sensitive data from your users. Turn it on when you need it:
 
 ```python
-shield360.init(capture_message_content=False)
+shield360.init(capture_message_content=True)
 ```
+
+or set `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`. Content you send is stored only if your organisation's [Data retention](https://shield360.ai) setting allows it; otherwise the platform drops it on arrival.
 
 ## Limit Content Length
 
-By default, Shield360 captures full prompt and completion content without any truncation. If you want to limit the size of captured content (for example, to reduce trace storage costs or avoid excessively large spans), set `max_content_length` to a positive integer. Content exceeding the limit will be truncated with `...` appended.
+When content capture is on, Shield360 captures full prompt and completion content without any truncation. If you want to limit the size of captured content (for example, to reduce trace storage costs or avoid excessively large spans), set `max_content_length` to a positive integer. Content exceeding the limit will be truncated with `...` appended.
 
 A value of `None` (the default), `0`, or `-1` disables truncation entirely.
 
