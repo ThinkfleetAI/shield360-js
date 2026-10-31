@@ -202,6 +202,8 @@ export const GUARDED_METHODS: GuardedMethod[] = [
   { npmPackage: 'openai', protoPath: ['OpenAI', 'Responses', 'prototype'], methodName: 'create', extractInput: extractOpenAIInput, extractOutput: extractOpenAIOutput },
   // Anthropic
   { npmPackage: '@anthropic-ai/sdk', protoPath: ['Anthropic', 'Messages', 'prototype'], methodName: 'create', extractInput: extractAnthropicInput, extractOutput: extractAnthropicOutput },
+  // client.beta.messages (structured outputs, beta features): a class of its own; its parse() calls create().
+  { npmPackage: '@anthropic-ai/sdk', protoPath: ['Anthropic', 'Beta', 'Messages', 'prototype'], methodName: 'create', extractInput: extractAnthropicInput, extractOutput: extractAnthropicOutput },
   // Groq
   { npmPackage: 'groq-sdk', protoPath: ['Groq', 'Chat', 'Completions', 'prototype'], methodName: 'create', extractInput: extractGenericInput, extractOutput: extractGenericOutput },
   // Mistral
@@ -385,13 +387,149 @@ export type AutoGuardReport = {
 };
 
 /**
+ * The app's own copy of a provider package. Preloaded from a directory of its
+ * own (`--require /opt/shield360/.../register.js`), the SDK cannot see the
+ * app's node_modules, so the package is resolved from where the app runs
+ * (its working directory and its entry script) first: the same file the
+ * app's require() loads, so the class wrapped is the one the app calls.
+ */
+export function loadProvider(npmPackage: string, from: string[] = appDirs()): any {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require(require.resolve(npmPackage, { paths: from }));
+  } catch {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    return require(npmPackage);
+  }
+}
+
+function appDirs(): string[] {
+  const dirs = [process.cwd()];
+  if (process.argv[1]) dirs.push(require('path').dirname(process.argv[1]));
+  return dirs;
+}
+
+const GUARDED = Symbol.for('shield360.guarded');
+
+/** Wraps one provider method with the pipeline; true when it is wrapped (now or already). */
+function wrapMethod(mod: any, method: GuardedMethod, pipeline: Pipeline, protect?: ResolvedProtect): boolean {
+  const proto = resolveProto(mod, method.protoPath);
+  if (!proto || typeof proto[method.methodName] !== 'function') return false;
+  const original = proto[method.methodName];
+  if (original[GUARDED]) return true;
+  const guarded = async function (this: any, ...args: any[]) {
+    let params = args[0] || {};
+
+    params = applyPreflight(pipeline, params, method.extractInput, protect);
+    args[0] = params;
+
+    const response = await original.apply(this, args);
+
+    return applyPostflight(pipeline, response, method.extractOutput, protect);
+  };
+  (guarded as any)[GUARDED] = true;
+  proto[method.methodName] = guarded;
+  return true;
+}
+
+/**
+ * The ES module entry of the provider package a resolved file URL belongs
+ * to (its exports["."].import, or "module"), or null.
+ */
+export function esmEntryOf(url: string, npmPackage: string): string | null {
+  const marker = `/node_modules/${npmPackage}/`;
+  const at = url.lastIndexOf(marker);
+  if (!url.startsWith('file:') || at < 0) return null;
+  const dir = url.slice(0, at + marker.length);
+  try {
+    const { readFileSync } = require('fs') as typeof import('fs');
+    const { fileURLToPath } = require('url') as typeof import('url');
+    const pkg = JSON.parse(readFileSync(fileURLToPath(new URL('package.json', dir)), 'utf8'));
+    const dot = pkg.exports && typeof pkg.exports === 'object' && '.' in pkg.exports ? pkg.exports['.'] : pkg.exports;
+    const pick = (c: unknown): unknown => (c && typeof c === 'object' ? ((c as any).node ?? (c as any).default) : c);
+    let entry = dot && typeof dot === 'object' ? pick(dot.import) : undefined;
+    // { require: ..., default: './index.mjs' }: the default is the ES module build.
+    if (typeof entry !== 'string' && dot && typeof dot === 'object' && typeof pick(dot.default) === 'string' && /\.mjs$/.test(pick(dot.default) as string)) entry = pick(dot.default);
+    if (typeof entry !== 'string') entry = pkg.module;
+    return typeof entry === 'string' ? new URL(entry, dir).href : null;
+  } catch {
+    return null;
+  }
+}
+
+// import() as written, which TypeScript's CommonJS output would turn into require().
+const nativeImport = new Function('url', 'return import(url)') as (url: string) => Promise<any>;
+const esmSeen = new Set<string>();
+let esmPipeline: { pipeline: Pipeline; protect?: ResolvedProtect } | null = null;
+
+/**
+ * Providers the app loads as ES modules (a bundler's external import, an
+ * ESM app with the loader hook off): the CommonJS classes wrapped above are
+ * not the ones it calls. A resolve-only hook (module.registerHooks, Node.js
+ * 22.15 / 23.5 and later; it reads no source, so it costs nothing like the
+ * ESM loader hook) sees the provider's .mjs being resolved; the same module
+ * is then imported here and its classes wrapped. The import shares the
+ * app's module instance and finishes long before the app's first LLM call.
+ */
+function watchEsmProviders(pipeline: Pipeline, protect?: ResolvedProtect): void {
+  const first = esmPipeline === null;
+  esmPipeline = { pipeline, protect };
+  if (!first) return;
+  const mod = require('module') as { registerHooks?: (hooks: { resolve: (s: string, c: unknown, next: (s: string, c: unknown) => any) => any }) => void };
+  if (typeof mod.registerHooks !== 'function') return;
+  const packages = Array.from(new Set(GUARDED_METHODS.map((m) => m.npmPackage)));
+  try {
+    mod.registerHooks({
+      resolve(specifier, context, nextResolve) {
+        const result = nextResolve(specifier, context);
+        try {
+          const url = result?.url;
+          if (typeof url === 'string' && url.includes('/node_modules/') && (result.format === 'module' || url.endsWith('.mjs'))) {
+            for (const npmPackage of packages) {
+              if (!url.includes(`/node_modules/${npmPackage}/`)) continue;
+              // The package's root as the app's import sees it: resolved from inside the package
+              // (self-reference) with the same conditions; its package.json when that fails.
+              let entry: string | null = null;
+              try {
+                entry = nextResolve(npmPackage, { ...(context as object), parentURL: url })?.url ?? null;
+              } catch {
+                entry = null;
+              }
+              if (!entry || !(entry.endsWith('.mjs') || entry.startsWith('file:'))) entry = esmEntryOf(url, npmPackage);
+              if (!entry || esmSeen.has(entry)) continue;
+              esmSeen.add(entry);
+              nativeImport(entry)
+                .then((ns) => {
+                  const now = esmPipeline!;
+                  const done = GUARDED_METHODS.filter((m) => m.npmPackage === npmPackage && wrapMethod(ns, m, now.pipeline, now.protect));
+                  if (done.length) console.log(`[shield360] Auto-guards: wrapped ${npmPackage} (ES module)`);
+                })
+                .catch(() => {
+                  // the app's own import reports a module that cannot load
+                });
+            }
+          }
+        } catch {
+          // watching never breaks the app's imports
+        }
+        return result;
+      },
+    });
+  } catch {
+    // hooks unavailable: CommonJS providers are still wrapped
+  }
+}
+
+/**
  * Wraps every installed provider the SDK knows. With Shield Protect in
  * enforced mode the pipeline fails closed (failOpen is overridden, with a
  * warning when it was set), and a package named in `required` that could
  * not be wrapped throws ProtectReadinessError: protected startup fails
  * rather than running unguarded.
  *
- * Supported module loading: CommonJS `require`, and ESM `import` of a
+ * Supported module loading: CommonJS `require` (from the SDK's or the app's
+ * node_modules, see loadProvider), ESM `import` of a provider's own ES
+ * module build where module.registerHooks exists (watchEsmProviders), and ESM `import` of a
  * provider whose package resolves to the same CommonJS build (openai and
  * @anthropic-ai/sdk do under Node's default conditions). An ESM-only
  * resolution loads a class this function never sees; name the package in
@@ -418,29 +556,14 @@ export function setupAutoGuards(
   }
 
   const wrapped = new Set<string>();
-  for (const { npmPackage, protoPath, methodName, extractInput, extractOutput } of GUARDED_METHODS) {
+  for (const method of GUARDED_METHODS) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const mod = require(npmPackage);
-      const proto = resolveProto(mod, protoPath);
-      if (!proto || typeof proto[methodName] !== 'function') continue;
-
-      const original = proto[methodName];
-      proto[methodName] = async function (this: any, ...args: any[]) {
-        let params = args[0] || {};
-
-        params = applyPreflight(pipeline, params, extractInput, protect);
-        args[0] = params;
-
-        const response = await original.apply(this, args);
-
-        return applyPostflight(pipeline, response, extractOutput, protect);
-      };
-      wrapped.add(npmPackage);
+      if (wrapMethod(loadProvider(method.npmPackage), method, pipeline, protect)) wrapped.add(method.npmPackage);
     } catch {
       // module not installed, skip silently
     }
   }
+  watchEsmProviders(pipeline, protect);
 
   const missing = (protect?.required ?? []).filter((pkg) => !wrapped.has(pkg));
   setProtectState({ mode: protect?.mode, wrapped: Array.from(wrapped), missing });

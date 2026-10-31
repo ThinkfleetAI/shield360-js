@@ -1,6 +1,7 @@
 /**
- * Zero-code entry: starts Shield360 (telemetry and, when asked for, RASP)
- * from SHIELD360_* / OTEL_* environment variables before the app loads.
+ * Zero-code entry: starts Shield360 (telemetry and, when asked for, RASP and
+ * guards) from SHIELD360_* / OTEL_* environment variables before the app loads.
+ * `SHIELD360_GUARDS=prompt_injection:block,pii:redact` turns guards on.
  *
  *   node --require shield360/register app.js
  *   NODE_OPTIONS="--require shield360/register" npm start
@@ -94,6 +95,7 @@ function initFromEnv() {
     /* eslint-disable @typescript-eslint/no-require-imports */
     const Shield360 = require('./index').default as { init: (o?: Shield360Options) => void };
     const { markZeroCodeStarted } = require('./zero-code') as typeof import('./zero-code');
+    const { guardsFromEnv } = require('./guard/env') as typeof import('./guard/env');
     /* eslint-enable @typescript-eslint/no-require-imports */
 
     const options: Shield360Options = {
@@ -102,6 +104,9 @@ function initFromEnv() {
       disabledInstrumentors: parseCSV(process.env.SHIELD360_DISABLED_INSTRUMENTORS),
       customSpanAttributes: parseResourceAttributes(process.env.OTEL_RESOURCE_ATTRIBUTES),
     };
+    // SHIELD360_GUARDS: the guards a code-free start runs (guard/env.ts).
+    const guards = guardsFromEnv(process.env.SHIELD360_GUARDS);
+    if (guards) options.guards = guards;
 
     Shield360.init(options);
     markZeroCodeStarted();

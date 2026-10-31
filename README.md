@@ -193,6 +193,7 @@ export SHIELD360_URL=https://app.shield360.ai
 export SHIELD360_API_KEY=...                      # from Settings > API keys
 export SHIELD360_RASP=monitor                     # or block; leave unset for telemetry only
 export SHIELD360_CONFIG_PUBLIC_KEY='{"kty":"OKP",...}'  # Runtime protection settings
+export SHIELD360_GUARDS=prompt_injection:block,pii:warn   # optional: guards on LLM calls
 
 node --require shield360/register app.js          # CommonJS
 node --import shield360/register app.mjs          # ES modules
@@ -203,6 +204,7 @@ What the preload does, before the app's first line runs:
 
 - Calls `Shield360.init()` with the settings from the environment (`OTEL_SERVICE_NAME`, `OTEL_DEPLOYMENT_ENVIRONMENT`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_RESOURCE_ATTRIBUTES`, `SHIELD360_URL`, `SHIELD360_API_KEY`, `SHIELD360_DISABLED_INSTRUMENTORS` and the other `SHIELD360_*` variables `init()` reads).
 - With `SHIELD360_RASP=monitor|block`, installs the RASP sink hooks before the app takes its own references to `child_process`, `fs` and the database drivers, and captures every request served by an `http` or `https` server (Express, Fastify, Koa, Nest and raw `http`), so no middleware is needed. Adding `raspExpress()` or another framework middleware as well is fine: it takes over the request with its richer view and nothing is reported twice.
+- With `SHIELD360_GUARDS`, turns guards on for every LLM call the app makes, as `init({ guards })` would, and starts the guard heartbeat. Each entry is a guard kind (`prompt_injection`, `pii`, `moderation`) and, after a colon, its action (`allow`, `warn`, `redact`, or `block`, which is `deny`). An entry it cannot read is skipped with a warning.
 - Registers the OpenTelemetry ESM loader hook (`module.register`, Node.js 18.19 / 20.6 and later), so instrumentations also patch packages the app loads with `import`. Set `SHIELD360_ESM_HOOK=off` to leave it out.
 
 Rules it keeps:
@@ -214,7 +216,7 @@ Limits:
 
 - In block mode without framework middleware, a virtual patch that matches the request answers 403 before the app sees it, and so does a block in a raw `http` handler, synchronous or `async` (a block after an `await` is answered, not left as an unhandled rejection). Frameworks catch errors from their route handlers themselves, so a block raised at a sink inside an Express, Koa or Fastify handler gets the framework's error response (a 500 in Express) unless that framework's RASP middleware or error handler is added.
 - `NODE_OPTIONS` is inherited by child Node.js processes, which start Shield360 too. Use `node --require` on the app's command when that is not wanted.
-- Bundled apps (esbuild, webpack, `ncc`) and single-executable apps inline their dependencies, so instrumentations that patch packages by name do not see them. The RASP hooks on Node's built-in modules still apply. Keep instrumented packages external, such as the database driver (`external: ['pg']` in esbuild, installed beside the bundle), or call `Shield360.init()` in code.
+- Bundled apps (esbuild, webpack, `ncc`) and single-executable apps inline their dependencies, so instrumentations that patch packages by name do not see them. The RASP hooks on Node's built-in modules still apply. Keep instrumented packages external, such as the database driver (`external: ['pg']` in esbuild, installed beside the bundle), or call `Shield360.init()` in code. The same goes for guards: keep the LLM client external (`@anthropic-ai/sdk`, `openai`) so they wrap it. A provider installed beside the app is found from the app's working directory and entry script even when the SDK is preloaded from a directory of its own. A provider the app loads as an ES module (a bundler's external import, such as Next.js `serverExternalPackages`) is wrapped too on Node.js 22.15 / 23.5 and later (`module.registerHooks`, a resolve-only hook that reads no source).
 - `NODE_OPTIONS="--require shield360/register"` also works for ES module apps. Node runs the preload again in its module-hooks thread, and the preload does nothing there.
 - Packages imported as ES modules are patched only through the loader hook; with `SHIELD360_ESM_HOOK=off`, only CommonJS loads are instrumented.
 
@@ -222,6 +224,7 @@ Limits:
 |---|---|---|
 | `SHIELD360_RASP` | unset (off) | `monitor` or `block` turns RASP on; `off` always wins. |
 | `SHIELD360_ESM_HOOK` | on | `off` skips the ES module loader hook. New for the zero-code entry. |
+| `SHIELD360_GUARDS` | unset (no guards) | Guards on LLM calls, such as `prompt_injection:block,pii:warn`. |
 
 ## Configuration
 

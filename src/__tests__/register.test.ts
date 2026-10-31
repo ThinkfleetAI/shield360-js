@@ -51,6 +51,23 @@ describe('shield360/register', () => {
     });
   });
 
+  it('passes the guards SHIELD360_GUARDS names', async () => {
+    process.env.SHIELD360_GUARDS = 'prompt_injection:block,pii:redact';
+    await import('../register');
+
+    const options = initMock.mock.calls[0][0];
+    expect(options.guards.map((g: { name: string; action: string }) => [g.name, g.action])).toEqual([
+      ['prompt_injection', 'deny'],
+      ['pii', 'redact'],
+    ]);
+  });
+
+  it('passes no guards without SHIELD360_GUARDS', async () => {
+    delete process.env.SHIELD360_GUARDS;
+    await import('../register');
+    expect(initMock.mock.calls[0][0]).not.toHaveProperty('guards');
+  });
+
   it('skips unsupported Node.js versions', async () => {
     Object.defineProperty(process.versions, 'node', {
       value: '16.20.2',

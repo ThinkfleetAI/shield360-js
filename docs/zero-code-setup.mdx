@@ -23,6 +23,7 @@ export OTEL_SERVICE_NAME=orders-api
 export SHIELD360_RASP=monitor                    # or block; leave unset for telemetry only
 export SHIELD360_CONFIG_PUBLIC_KEY='<JWK from the app’s Runtime protection settings>'
 export SHIELD360_IAST=on                         # optional: report vulnerabilities
+export SHIELD360_GUARDS=prompt_injection:block,pii:warn   # optional, Node.js: guards on LLM calls
 ```
 
 The API key decides which project environment the app reports to. See [Pin the config key](https://shield360.ai) for where the public key comes from.
@@ -38,6 +39,8 @@ The API key decides which project environment the app reports to. See [Pin the c
     ```
 
     The runtime protection hooks are installed before your app loads, and every `http` and `https` request is captured without middleware. ES module imports are instrumented too. Set `SHIELD360_ESM_HOOK=off` to leave the ES module hook out.
+
+    `SHIELD360_GUARDS` turns guards on for the app's LLM calls: guard kinds (`prompt_injection`, `pii`, `moderation`), each with an action after a colon (`allow`, `warn`, `redact`, or `block`). The guards also send the heartbeat the [Secured by Shield360 badge](https://shield360.ai) reads. A bundled app must keep its LLM client (`@anthropic-ai/sdk`, `openai`) outside the bundle, installed beside it.
   </Tab>
   <Tab title="Python">
     ```bash
