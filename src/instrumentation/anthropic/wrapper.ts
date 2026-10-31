@@ -6,6 +6,8 @@ import Shield360Helper, {
   getCurrentAgentVersion,
 } from '../../helpers';
 import SemanticConvention from '../../semantic-convention';
+// SHIELD: runtime protection hook point.
+import { recordModelResponse } from '../../rasp/model-output';
 import BaseWrapper from '../base-wrapper';
 
 const FINISH_REASON_MAP: Record<string, string> = {
@@ -302,6 +304,8 @@ export default class AnthropicWrapper extends BaseWrapper {
     tbt?: number;
   }) {
     const captureContent = Shield360Config.captureMessageContent;
+    // SHIELD: runtime protection: the model's answer is untrusted input (in memory; a no-op unless RASP is on).
+    recordModelResponse(result);
     const requestModel = args[0]?.model || 'claude-3-5-sonnet-latest';
     const {
       messages,

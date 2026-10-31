@@ -56,7 +56,7 @@ describe('findings', () => {
 });
 
 describe('findings made before the key arrives', () => {
-  it('are fingerprinted once the key is known, without the value ever being serialised', async () => {
+  it('are fingerprinted once the key is known, without the value ever being serialized', async () => {
     const { completeFinding, makeFinding } = await import('../findings');
     const early = makeFinding('ssn', SSN);
     expect(early.fingerprint).toBeUndefined();

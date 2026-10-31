@@ -6,6 +6,8 @@ import Shield360Helper, {
   getCurrentAgentVersion,
 } from '../../helpers';
 import SemanticConvention from '../../semantic-convention';
+// SHIELD: runtime protection hook point.
+import { recordModelResponse } from '../../rasp/model-output';
 import BaseWrapper, { BaseSpanAttributes } from '../base-wrapper';
 
 function spanCreationAttrs(
@@ -352,6 +354,8 @@ class OpenAIWrapper extends BaseWrapper {
     tbt?: number;
   }) {
     const captureContent = Shield360Config.captureMessageContent;
+    // SHIELD: runtime protection: the model's answer is untrusted input (in memory; a no-op unless RASP is on).
+    recordModelResponse(result);
     const requestModel = args[0]?.model || 'gpt-4o';
     const {
       messages,
@@ -1185,6 +1189,8 @@ class OpenAIWrapper extends BaseWrapper {
     tbt?: number;
   }) {
     const captureContent = Shield360Config.captureMessageContent;
+    // SHIELD: runtime protection: the model's answer is untrusted input (in memory; a no-op unless RASP is on).
+    recordModelResponse(result);
     const requestModel = args[0]?.model || 'gpt-4o';
     const {
       input,

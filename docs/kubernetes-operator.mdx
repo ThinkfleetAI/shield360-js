@@ -1,0 +1,99 @@
+---
+title: "Kubernetes operator: protect workloads by annotation"
+sidebarTitle: "Kubernetes operator"
+description: "The Shield360 operator adds telemetry and runtime protection to Node.js, Python, .NET and Java pods when they start, chosen by an annotation, without changing their images."
+---
+
+The Shield360 operator applies [zero-code setup](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/zero-code-setup.mdx) to Kubernetes workloads. It works like the OpenTelemetry Operator's auto-instrumentation.
+
+When a pod is created, a mutating admission webhook checks whether the pod or its namespace opted in. If it did, the webhook:
+
+1. adds an init container that copies the SDK into a shared volume,
+2. mounts that volume read-only into the app container, and
+3. sets the language's start-up variables (`NODE_OPTIONS`, `PYTHONPATH`, `DOTNET_STARTUP_HOOKS` or `JAVA_TOOL_OPTIONS`).
+
+Your images don't change. The operator runs unprivileged and is separate from the node-level Shield360 controller.
+
+## Install
+
+<Info>
+The operator and its images are not published yet. Build them from the [Shield360 repository](https://github.com/ThinkfleetAI/Shield360) (`operator/` and `deploy/operator/`) and push them to your own registry.
+</Info>
+
+<Steps>
+  <Step title="Build the images">
+    ```bash
+    REG=registry.example.com
+    docker build -f deploy/operator/Dockerfile -t $REG/shield360-operator:0.1.0 .
+    docker build -f deploy/operator/images/nodejs.Dockerfile -t $REG/shield360-autoinstrumentation-nodejs:0.1.0 .
+    docker build -f deploy/operator/images/java.Dockerfile -t $REG/shield360-autoinstrumentation-java:0.1.0 .
+    ```
+
+    Build only the languages you run. Python and .NET have their own Dockerfiles in the same folder.
+  </Step>
+  <Step title="Install the chart">
+    ```bash
+    helm install shield360-operator deploy/operator/chart/shield360-operator \
+      --namespace shield360-system --create-namespace \
+      --set image.repository=$REG/shield360-operator \
+      --set sdkImages.nodejs=$REG/shield360-autoinstrumentation-nodejs:0.1.0 \
+      --set sdkImages.java=$REG/shield360-autoinstrumentation-java:0.1.0
+    ```
+
+    The webhook needs TLS. The chart generates a certificate by default. Set `certManager.enabled=true` to use cert-manager instead.
+  </Step>
+  <Step title="Add the API key and an instrumentation">
+    In each app namespace, create a Secret with your environment's API key (**Settings → Developer → API keys**) under the key `api-key`, then a `Shield360Instrumentation`:
+
+    ```yaml
+    apiVersion: shield360.ai/v1alpha1
+    kind: Shield360Instrumentation
+    metadata:
+      name: default
+      namespace: orders
+    spec:
+      endpoint: https://app.shield360.ai
+      apiKey:
+        secretName: shield360
+        key: api-key
+      environment: production
+      rasp:
+        mode: monitor
+        configPublicKey: '<JWK from the app’s Runtime protection settings>'
+      iast:
+        enabled: true
+        sampleRate: "0.1"
+    ```
+
+    The API key is always read from the Secret. The resource has no field that can hold it.
+  </Step>
+  <Step title="Opt workloads in">
+    Annotate the pod template, or the whole namespace:
+
+    ```yaml
+    spec:
+      template:
+        metadata:
+          annotations:
+            shield360.ai/inject-nodejs: "true"
+    ```
+
+    Existing pods aren't changed. Restart them (`kubectl rollout restart`) to apply it.
+  </Step>
+</Steps>
+
+## Annotations
+
+| Annotation | Value |
+|---|---|
+| `shield360.ai/inject-nodejs`, `inject-python`, `inject-dotnet`, `inject-java` | `"true"` (the namespace's only instrumentation), the instrumentation's name, or `"false"` |
+| `shield360.ai/inject-sdk` | Adds only the configuration, for apps that already ship the SDK |
+| `shield360.ai/container-names` | Which containers to change, when a pod has several |
+
+Annotations work on a pod or a namespace, and the pod's annotation wins, which is how one pod opts out of a namespace-wide setting. The instrumentation must be in the pod's namespace.
+
+## Next steps
+
+- [Zero-code setup](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/zero-code-setup.mdx)
+- [Runtime protection](https://shield360.ai)
+- [Vulnerabilities (passive IAST)](https://shield360.ai)

@@ -171,7 +171,7 @@ describe('sanitisers', () => {
     ['git://github.com/acme/api', 'https://github.com/acme/api'],
     ['http://git.local:8080/acme/api/?q=1#x', 'http://git.local:8080/acme/api'],
     ['HTTPS://GitHub.com/acme/api/', 'https://github.com/acme/api'],
-  ])('normalises repository URL %p', (input, expected) => {
+  ])('normalizes repository URL %p', (input, expected) => {
     expect(sanitiseRepositoryUrl(input)).toBe(expected);
   });
 
@@ -230,5 +230,13 @@ describe('Shield360.init resource', () => {
         [ATTR_VCS_REF_NAME]: 'main',
       });
     });
+  });
+});
+
+describe('SHIELD360_RELEASE', () => {
+  it('names the release when SHIELD360_SERVICE_VERSION is not set, and beats OTel env', () => {
+    expect(resolveBuildAttributes({}, { SHIELD360_RELEASE: '2026.10.29', OTEL_SERVICE_VERSION: '9.9.9' })[ATTR_SERVICE_VERSION]).toBe('2026.10.29');
+    expect(resolveBuildAttributes({}, { SHIELD360_RELEASE: 'r1', SHIELD360_SERVICE_VERSION: 'v2' })[ATTR_SERVICE_VERSION]).toBe('v2');
+    expect(resolveBuildAttributes({ serviceVersion: 'opt' }, { SHIELD360_RELEASE: 'r1' })[ATTR_SERVICE_VERSION]).toBe('opt');
   });
 });

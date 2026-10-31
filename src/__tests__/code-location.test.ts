@@ -69,7 +69,7 @@ describe('CodeLocationSpanProcessor', () => {
     expect(attrs[ATTR_CODE_LINE_NUMBER]).toBeUndefined();
   });
 
-  it('recognises instrumentations that set the operation after creation', () => {
+  it('recognizes instrumentations that set the operation after creation', () => {
     provider.getTracer('@shield360/instrumentation-langchain').startSpan('chain').end();
     const attrs = exporter.getFinishedSpans()[0].attributes;
     expect(attrs[ATTR_CODE_FILE_PATH]).toBe(THIS_FILE);

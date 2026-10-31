@@ -1,7 +1,8 @@
 /**
  * Build and VCS resource attributes (service.version, vcs.*), resolved once
  * at init. Per attribute, the first valid value wins from: explicit config
- * (init option, SHIELD360_* env), OTel env (OTEL_SERVICE_VERSION,
+ * (init option, SHIELD360_* env — SHIELD360_SERVICE_VERSION, then its alias
+ * SHIELD360_RELEASE, for service.version), OTel env (OTEL_SERVICE_VERSION,
  * OTEL_RESOURCE_ATTRIBUTES), then CI/platform env. CI values come from a
  * single provider and are never mixed across providers.
  * Values are never logged.
@@ -170,6 +171,7 @@ export function resolveBuildAttributes(
       sanitiseText,
       options.serviceVersion,
       env.SHIELD360_SERVICE_VERSION,
+      env.SHIELD360_RELEASE,
       env.OTEL_SERVICE_VERSION,
       otel[ATTR_SERVICE_VERSION]
     ),

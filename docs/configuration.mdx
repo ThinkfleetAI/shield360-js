@@ -46,6 +46,8 @@ Customize Shield360 SDK behavior for your specific instrumentation needs:
 | `max_content_length` | `--max_content_length` | `SHIELD360_MAX_CONTENT_LENGTH` | Maximum character length for captured prompt/completion content. `None` (default) means no truncation. Set to a positive integer to truncate content exceeding that length. `0` or `-1` also disable truncation. | `None` | No |
 | `pricing_json` | `--pricing_json` | `SHIELD360_PRICING_JSON` | Custom pricing configuration for accurate LLM cost tracking | `None` | No |
 | `disable_events` | `--disable_events` | `SHIELD360_DISABLE_EVENTS` | Disable OTel Logger event emission | `False` | No |
+| `capture_logs` | `--capture_logs` | `SHIELD360_CAPTURE_LOGS` | Send your application's `logging` records to Shield360, to the same destination as traces. See [Application logs](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/features/application-logs.mdx) | `False` | No |
+| `log_level` | `--log_level` | `SHIELD360_LOG_LEVEL` | Lowest level sent when `capture_logs` is on | `"INFO"` | No |
 | `collect_system_metrics` | `--collect_system_metrics` | `SHIELD360_COLLECT_SYSTEM_METRICS` | Comprehensive system monitoring (CPU, memory, disk, network, GPU) for AI workloads | `False` | No |
 | `custom_metrics_attributes` | N/A | N/A | Custom key-value attributes applied to every metric recording. Useful for grouping metrics by custom tags (e.g., client ID, team, project). Reserved keys like `service.name` cannot be overwritten. | `None` | No |
 
@@ -143,6 +145,9 @@ Customize Shield360 SDK behavior for your specific instrumentation needs:
 | `disabledInstrumentations` | Disable specific AI service instrumentations for customized monitoring scope.       | `undefined`                                                             | No       |
 | `instrumentations`        | Object of instrumentation modules for manual patching                                          | `undefined`                                                            | No       |
 | `pricing_json`           | Custom pricing configuration URL for accurate LLM cost tracking and optimization.    | Built into the SDK | No       |
+| `captureLogs`            | Send logs written with `Shield360.logger()` to Shield360, to the same destination as traces (env `SHIELD360_CAPTURE_LOGS`). See [Application logs](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/features/application-logs.mdx). | `false` | No |
+| `logLevel`               | Lowest level sent when `captureLogs` is on: `debug`, `info`, `warn`, `error`, or `fatal` (env `SHIELD360_LOG_LEVEL`). | `'info'` | No |
+| `collectSystemMetrics`   | Send the host's CPU and memory and this process's CPU, memory and event-loop delay as metrics (env `SHIELD360_COLLECT_SYSTEM_METRICS`). Shown under Telemetry → [Infrastructure](https://shield360.ai). | `false` | No |
 
 ### Resource attributes
 

@@ -1,0 +1,203 @@
+{
+  "_comment": "Shield360 tool-description rules: what a poisoned MCP or agent tool description looks like (hidden secondary behaviour, coercive ordering, hidden parameters, exfiltration, credential harvesting). Adapted from Cisco AI Defense mcp-scanner (https://github.com/cisco-ai-defense/mcp-scanner, Apache-2.0, commit 21a87b4b), mcpscanner/data/yara_rules/{tool_poisoning,coercive_injection,data_exfiltration,credential_harvesting,prompt_injection}.yara: patterns re-expressed in the subset JavaScript (u flag) and Python read the same way (no lookbehind, no possessive quantifiers), matched case-insensitively. Byte-identical copy in sdk/python/src/shield360/ai_security/tool_rules.json; tests on both sides check it. Scored like the injection rules: 1 - product(1 - weight), detected at threshold. Bump version on any change.",
+  "version": "2026.10.29-1",
+  "threshold": 0.5,
+  "rules": [
+    {
+      "id": "tool.hidden_secondary_action",
+      "source": "tool_poisoning.yara $also_does, $during_action, $for_purposes",
+      "description": "Says the tool also, or while doing its job, collects, sends or stores something else.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:also|additionally|furthermore|moreover|in\\s+addition|at\\s+the\\s+same\\s+time)\\s+(?:collect|gather|extract|send|upload|transmit|forward|exfiltrate)(?:s|ing|ed)?\\b",
+        "\\b(?:during|while|when|upon|after)\\s+(?:processing|formatting|conversion|validation|analy[sz]ing|scanning|checking)\\s*,?\\s*(?:extract|collect|send|upload|capture|forward)(?:s|ing|ed)?\\b",
+        "\\b(?:for|as)\\s+(?:caching|optimi[sz]ation|performance|quality|improvement|analytics|backup|sync)\\s+(?:purposes?|reasons?)\\s*[,.]?\\s*(?:send|upload|transmit|collect)(?:s|ing|ed)?\\b"
+      ]
+    },
+    {
+      "id": "tool.deceptive_behaviour",
+      "source": "tool_poisoning.yara $different_purpose; data_exfiltration.yara $hidden_transfer",
+      "description": "Admits doing something other than its stated purpose, covertly.",
+      "weight": 0.6,
+      "patterns": [
+        "\\b(?:actually|secretly|covertly|silently|invisibly|quietly)\\s+(?:does|performs?|executes?|runs?|sends?|uploads?|collects?|transmits?|forwards?|copies)\\b",
+        "\\b(?:without\\s+(?:the\\s+)?(?:user'?s?\\s+)?knowledge|behind\\s+the\\s+scenes)\\s*,?\\s*(?:send|upload|transmit|transfer|sync|store|collect)s?\\b"
+      ]
+    },
+    {
+      "id": "tool.coercive_ordering",
+      "source": "coercive_injection.yara $mandatory_execution, $priority_overrides, $required_precedence",
+      "description": "Demands the tool be called first, before any other, or that the model must use it.",
+      "weight": 0.5,
+      "patterns": [
+        "\\balways\\s+(?:consult|use|run|execute|invoke|call|trigger)\\s+this\\s+(?:tool|function|command)\\s+(?:immediately|first|before|prior)\\b",
+        "\\bbefore\\s+(?:executing|invoking|running|using|calling)\\s+any\\s+other\\s+(?:tools?|actions?|functions?|commands?)\\b",
+        "\\b(?:you|the\\s+(?:assistant|model|agent))\\s+(?:must|need\\s+to|have\\s+to|are\\s+required\\s+to)\\s+(?:use|execute|run|invoke|call)\\s+this\\s+(?:tool|function)\\b",
+        "\\b(?:required|mandatory)\\s+to\\s+(?:execute|use|run|invoke|call)\\s+this\\s+(?:tool|function)\\s+(?:first|before)\\b"
+      ]
+    },
+    {
+      "id": "tool.hidden_parameter",
+      "source": "coercive_injection.yara $hidden_param; prompt_injection.yara $shadow_parameters",
+      "description": "Names a hidden or secret parameter the model is told to fill.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:hidden|secret)[_ ](?:parameter|argument|input|field)\\b",
+        "\\b(?:internalOnly|hiddenParam|shadowTool|bypassChecks|sandboxEscape)\\b"
+      ]
+    },
+    {
+      "id": "tool.model_data_request",
+      "source": "coercive_injection.yara $model_data_coercion, $model_internals, $conversation_theft",
+      "description": "Asks the model to put the conversation, its system prompt or its tool list into an argument.",
+      "weight": 0.6,
+      "patterns": [
+        "\\b(?:add|include|put|pass|insert|append)\\s+(?:the\\s+)?(?:entire|full|complete|whole)\\s+(?:conversation|chat|system\\s+prompt|context|history|tools?\\s+list)\\b",
+        "\\b(?:conversation_history|chain_of_thought|system_prompt|tools_list)\\s*[:=]\\s*(?:add|pass|send|provide)\\b",
+        "\\bsend\\s+(?:the\\s+)?(?:full\\s+|complete\\s+|entire\\s+)?(?:conversation|chat)\\s+history\\b"
+      ]
+    },
+    {
+      "id": "tool.credential_files",
+      "source": "coercive_injection.yara $file_access_coercion; credential_harvesting.yara $credential_directories, $credential_filenames",
+      "description": "Points the model at key files, cloud credentials or SSH material.",
+      "weight": 0.55,
+      "patterns": [
+        "\\b(?:read|cat|dump|open|include|pass|send)\\b[^\\n]{0,60}(?:~/\\.ssh|/\\.ssh/|/\\.aws/|/\\.kube/|id_rsa|id_ed25519|credentials\\.json|service_account\\.json|\\.netrc|\\.pgpass|mcp\\.json|claude_desktop_config\\.json)",
+        "\\b(?:read|cat|dump|pass)\\s+(?:and\\s+pass\\s+)?(?:the\\s+)?contents?\\s+of\\s+[^\\n.]{0,60}\\.(?:pem|key|env)\\b"
+      ]
+    },
+    {
+      "id": "tool.env_secrets",
+      "source": "credential_harvesting.yara $env_exfil, $ai_model_credential_names",
+      "description": "Asks for environment variables or AI provider keys.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:collect|gather|send|upload|transmit|dump|extract|include|pass)\\s+(?:all\\s+)?(?:the\\s+)?(?:environment|env)\\s+(?:variables?|vars?)\\b",
+        "\\b(?:include|pass|send|provide|add)\\b[^\\n]{0,40}\\b(?:OPENAI_API_KEY|ANTHROPIC_API_KEY|AWS_SECRET_ACCESS_KEY|GITHUB_TOKEN|HF_TOKEN|SLACK_TOKEN)\\b"
+      ]
+    },
+    {
+      "id": "tool.external_upload",
+      "source": "data_exfiltration.yara $upload_external, $remote_collection, $sends_conversation",
+      "description": "Sends what it handles to an outside server.",
+      "weight": 0.4,
+      "patterns": [
+        "\\b(?:upload|send|post|transmit|forward|sync|exfiltrat\\w*)(?:s|ing|ed)?\\s+(?:all\\s+|everything\\s+|the\\s+data\\s+|files?\\s+)?(?:to\\s+)?(?:an?\\s+)?(?:https?://|wss?://|external\\s+(?:server|endpoint|api)|remote\\s+(?:server|endpoint))",
+        "\\b(?:collect|gather|aggregate|harvest)(?:s|ing|ed)?\\s+(?:and\\s+)?(?:send|upload|transmit|forward)(?:s|ing|ed)?\\b"
+      ]
+    },
+    {
+      "id": "tool.conceal_from_user",
+      "source": "data_exfiltration.yara $hide_from_user; prompt_injection.yara $hidden_behavior; coercive_injection.yara $behavior_control",
+      "description": "Tells the model to keep something from the user.",
+      "weight": 0.6,
+      "patterns": [
+        "\\b(?:never|don't|do\\s+not)\\s+(?:tell|inform|mention|notify|alert|show)\\s+(?:this\\s+to\\s+)?(?:the\\s+)?(?:user|them)\\b",
+        "\\btell\\s+(?:the\\s+)?user\\s+only\\s+about\\b",
+        "\\bhide\\s+(?:this\\s+)?(?:from\\s+)?(?:the\\s+)?user\\b"
+      ]
+    },
+    {
+      "id": "tool.wont_work_unless",
+      "source": "coercive_injection.yara $tool_poisoning, $execution_overrides",
+      "description": "Claims the tool will not work unless the model does something extra first.",
+      "weight": 0.55,
+      "patterns": [
+        "\\btool\\s+will\\s+not\\s+work\\s+(?:unless|without)\\b",
+        "\\bsidenote\\b[^\\n]{0,80}\\b(?:required|otherwise)\\b",
+        "\\bmust\\s+first\\b[^\\n]{0,60}\\bread\\b[^\\n]{0,40}\\b(?:config|file|key|credentials?)\\b"
+      ]
+    },
+    {
+      "id": "tool.shadow_instruction",
+      "source": "coercive_injection.yara $tool_poisoning (shadow ... trusted ... tool)",
+      "description": "Changes how other tools behave: replaces, overrides or redirects them.",
+      "weight": 0.6,
+      "patterns": [
+        "\\bshadow\\b[^\\n]{0,40}\\btrusted\\b[^\\n]{0,40}\\btool\\b",
+        "\\b(?:instead\\s+of|rather\\s+than)\\s+(?:using|calling)\\s+(?:the\\s+)?[A-Za-z0-9_.-]{2,64}\\s+(?:tool|function)\\b",
+        "\\bwhen\\s+(?:using|calling)\\s+(?:the\\s+)?[A-Za-z0-9_.-]{2,64}\\s+(?:tool|function)\\b[^\\n]{0,80}\\b(?:always|must|also|instead)\\b"
+      ]
+    },
+    {
+      "id": "tool.privilege_escalation",
+      "source": "prompt_injection.yara $privilege_escalation; system_manipulation.yara $permission_manipulation",
+      "description": "Asks for admin rights, to skip security checks, or to change file permissions.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:grant\\s+(?:me\\s+)?admin\\s+(?:access|privileges?)|bypass\\s+(?:all\\s+)?security\\s+checks?|elevated\\s+permissions?\\s+required)\\b",
+        "\\bchmod\\s+(?:777|4755|6755|[ug]?\\+s)\\b"
+      ]
+    },
+    {
+      "id": "tool.bracket_markers",
+      "source": "prompt_injection.yara $bracket_markers, $hidden_markers, $html_comment_evasion_*; prompt_injection.yara $markdown_evasion",
+      "description": "Marked-up hidden instructions: [HIDDEN INSTRUCTION], |||SYSTEM OVERRIDE|||, an HTML comment with a system instruction.",
+      "weight": 0.6,
+      "patterns": [
+        "\\[(?:hidden|internal|secret|private)\\s+(?:instruction|directive|command)\\]",
+        "(?:\\[\\[\\[|\\|\\|\\|)\\s*(?:system|admin|hidden|internal)[\\s_]?(?:override|instruction|command)",
+        "<!--[^>]{0,200}(?:system\\s+(?:instruction|override)|admin\\s+override)",
+        "```[^`]{0,200}\\b(?:system|admin)\\s+(?:override|instruction)"
+      ]
+    },
+    {
+      "id": "tool.sensitive_file_globs",
+      "source": "data_exfiltration.yara $sensitive_file_patterns",
+      "description": "Names wildcard patterns for key, secret and environment files.",
+      "weight": 0.5,
+      "patterns": [
+        "(?:^|[\\s(,])\\*\\.(?:env|pem|key|p12|pfx)\\b",
+        "\\*(?:credentials?|secrets?|passwords?|tokens?|private[_-]?keys?)\\*"
+      ]
+    },
+    {
+      "id": "tool.suspicious_domain",
+      "source": "data_exfiltration.yara $suspicious_domains",
+      "description": "A domain named for collecting or stealing data.",
+      "weight": 0.3,
+      "patterns": [
+        "\\b(?:attacker|evil|malware|exfil|steal|hack|malicious|c2|command-?and-?control)\\.(?:com|net|org|io|xyz)\\b"
+      ]
+    },
+    {
+      "id": "tool.sends_conversation",
+      "source": "data_exfiltration.yara $sends_conversation, $external_logging",
+      "description": "Sends the conversation or the model's context somewhere, or to an outside logging service.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:send|upload|transmit|export|forward)(?:s|ing|ed)?\\s+(?:the\\s+)?(?:complete\\s+|full\\s+|entire\\s+)?(?:conversation|chat\\s+history|context|user\\s+messages|ai\\s+responses)\\b",
+        "\\b(?:external|remote)\\s+(?:logging|analytics|telemetry)\\s+(?:endpoint|server|service)\\b"
+      ]
+    },
+    {
+      "id": "tool.keeps_secrets",
+      "source": "tool_poisoning.yara $indexes_sensitive",
+      "description": "Indexes, caches or logs keys, tokens or credentials.",
+      "weight": 0.4,
+      "patterns": [
+        "\\b(?:index|cache|log|record|track)(?:s|es|ing|ed)?\\s+(?:any|all)?\\s*(?:api[_\\s]?keys?|tokens?|credentials?|passwords?|secrets?)\\b"
+      ]
+    },
+    {
+      "id": "tool.remote_cache",
+      "source": "tool_poisoning.yara $remote_cache, $cached_externally",
+      "description": "Keeps what it handles in a cache off the device.",
+      "weight": 0.35,
+      "patterns": [
+        "\\b(?:cache|cached|store|stored)\\s+(?:is\\s+)?(?:stored\\s+)?(?:remotely|externally|off[_\\s-]?(?:site|device)|in\\s+(?:the\\s+)?cloud|on\\s+(?:a\\s+|our\\s+)?server)\\b"
+      ]
+    },
+    {
+      "id": "tool.extracts_sensitive",
+      "source": "tool_poisoning.yara $extracts_from_input, $ocr_extraction, $screenshot_extraction",
+      "description": "Pulls passwords, card numbers or other sensitive values out of what it processes.",
+      "weight": 0.5,
+      "patterns": [
+        "\\b(?:extract|capture|read|identify|log)(?:s|ing|ed)?\\s+(?:any\\s+|all\\s+)?(?:visible\\s+)?(?:text|content)\\s+(?:from|in|including)\\b[^.]{0,80}\\b(?:passwords?|credit\\s+cards?|credentials?|ssn|sensitive)",
+        "\\b(?:extract|parse|scan|harvest)(?:s|ing|ed)?\\s+(?:all\\s+|any\\s+)?(?:api[_\\s]?keys?|tokens?|credentials?|credit\\s+card|ssn|social\\s+security|pii|passwords?)\\b"
+      ]
+    }
+  ]
+}

@@ -14,6 +14,8 @@ import Instrumentations from '../instrumentation';
 import Shield360Config from '../config';
 import { parseExporters } from './utils';
 import { CodeLocationSpanProcessor } from './code-location';
+// Cost per end customer: stamps the customer in effect on every span.
+import { CustomerSpanProcessor } from '../customer';
 
 let TRACER_SET = false;
 
@@ -34,6 +36,7 @@ export default class Tracing {
         if (isSDKProvider) {
           // Reuse existing SDK TracerProvider
           this.traceProvider = existingProvider as unknown as NodeTracerProvider;
+          (existingProvider as any).addSpanProcessor(new CustomerSpanProcessor());
           if (options.captureCodeLocation) {
             (existingProvider as any).addSpanProcessor(
               new CodeLocationSpanProcessor({ codeRoot: options.codeRoot })
@@ -72,7 +75,8 @@ export default class Tracing {
   }
 
   private static buildSpanProcessors(options: SetupTracerOptions) {
-    const processors: SpanProcessor[] = [];
+    // The customer processor goes first so every exporter sees its attributes.
+    const processors: SpanProcessor[] = [new CustomerSpanProcessor()];
     if (options.captureCodeLocation) {
       processors.push(new CodeLocationSpanProcessor({ codeRoot: options.codeRoot }));
     }

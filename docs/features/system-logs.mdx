@@ -1,0 +1,130 @@
+---
+title: "System logs"
+description: "Send logs that do not come from an SDK, such as Kubernetes containers, cluster events, the systemd journal, the Windows Event Log, Nginx and database log files, and syslog, to Shield360. Off until you turn it on."
+---
+
+Shield360 can collect logs that no SDK writes: container output on Kubernetes nodes, Kubernetes events, the systemd journal, the Windows Event Log, log files such as Nginx or PostgreSQL logs, and syslog. These logs appear under **Telemetry > Logs** next to your application logs, and you can narrow the list with the **Source** filter.
+
+System logs are **off by default**. Nothing is read from a node or server until you turn on an agent, and the agent reads only the sources you choose.
+
+## How it works
+
+An agent, the Shield360 collector (`shield360-otelcol`), runs on each node or server. It reads the sources you chose, masks the records, and sends them as OTLP to `<your Shield360 URL>/api/ingest/otlp/v1/logs`. It authenticates with a project API key. The key decides which project, and so which database, the logs are stored in. They use your logs table and its existing retention.
+
+Before a record leaves the machine, the agent:
+
+- **Masks it.** Credentials and opaque tokens in the log message and in string attributes are masked with the same rules the SDKs use. An attribute whose name looks like a credential is masked completely. Personal data in log messages is also masked.
+- **Drops fields you don't need.** Journal and Event Log records keep only the message, unit or provider, event ID and process ID. Fields such as command lines, which can contain credentials, are not sent.
+- **Applies limits.** A record larger than 64 KiB is dropped. A file line longer than that is dropped too. Lines are read in pieces of up to 1 MiB, so only the last piece of a line longer than 1 MiB can be short enough to be kept. Each source has its own pipeline and batches. When the memory limit is reached, readers wait and offer the same records again, without skipping ahead. The send queue survives restarts.
+- **Keeps journal severity.** A journal record's priority becomes its severity (`err` is ERROR, `warning` is WARN, and so on), so journal errors count as errors in the logs page and the behavior engine.
+
+Each record is labeled with `log.source` and `host.name`, and with the service or pod where one applies:
+
+| `log.source` | Comes from | Also labeled with |
+| --- | --- | --- |
+| `container` | Container output in `/var/log/pods` | `k8s.namespace.name`, `k8s.pod.name`, `k8s.container.name`, the workload (`k8s.deployment.name` and so on), and `service.name` |
+| `k8s_event` | Kubernetes events | `k8s.cluster.name`, and the object and reason of the event |
+| `system` | The systemd journal | `systemd.unit`, `syslog.identifier` |
+| `file` | Log files you list | `log.file.path` |
+| `syslog` | Syslog sent to the agent | The sender's host and app name |
+| `windows_event` | The Windows Event Log | `windows.event.id`, `windows.event.provider`, `windows.event.channel` |
+
+Logs from the SDKs have no `log.source` and are shown as **Application**.
+
+<Warning>
+**Collect each app's logs one way, not both.** In Kubernetes, an app whose SDK sends its logs (application logs turned on) and which also writes those logs to stdout or stderr is collected twice: once by the SDK as **Application** and once by the node agent as **Container**. Each record is then counted twice in the logs page and in the behavior engine. For each app, either keep SDK log capture and leave its namespace out of the node agent (`systemLogs.node.excludeNamespaces`, or list only the other namespaces in `systemLogs.node.namespaces`), or turn SDK log capture off and rely on container logs. Use the SDK when you want logs linked to traces.
+</Warning>
+
+## Kubernetes
+
+The operator's Helm chart includes a DaemonSet and a single-replica Deployment. The DaemonSet reads container output and the node journal on every node. The Deployment collects cluster events once for the whole cluster.
+
+1. Build the agent image from `src/otel-collector/Dockerfile.agent`, or run **CI / Operator** manually and use its `system-logs-agent` image. Push the image to your registry.
+2. Store the project's API key in a Secret in the release namespace:
+
+   ```bash
+   kubectl -n shield360-system create secret generic shield360-api-key --from-literal=api-key=<project API key>
+   ```
+
+3. Turn on system logs:
+
+   ```bash
+   helm upgrade --install shield360-operator deploy/operator/chart/shield360-operator \
+     -n shield360-system \
+     --set image.repository=<operator image> \
+     --set systemLogs.enabled=true \
+     --set systemLogs.image.repository=<agent image> --set systemLogs.image.tag=<tag> \
+     --set systemLogs.url=https://app.shield360.ai \
+     --set systemLogs.apiKeySecret.name=shield360-api-key \
+     --set systemLogs.clusterName=prod
+   ```
+
+| Value | Default | What it does |
+| --- | --- | --- |
+| `systemLogs.node.namespaces` | `[]` (all) | Reads containers in these namespaces only |
+| `systemLogs.node.excludeNamespaces` | `[]` | Skips containers in these namespaces |
+| `systemLogs.node.journald` | `true` | Reads the node journal (kubelet, container runtime, kernel) |
+| `systemLogs.node.journalDirectory` | `/var/log/journal` | Set to `/run/log/journal` on nodes that keep the journal in memory |
+| `systemLogs.node.kubeletStats` | `false` | Sends pod and node CPU and memory use from the kubelet |
+| `systemLogs.node.dockerContainersPath` | `""` | On Docker nodes, set to `/var/lib/docker/containers` |
+| `systemLogs.clusterEvents.enabled` | `true` | Collects cluster events |
+
+The agents have minimal permissions:
+
+- The node agent can get, list, and watch pods, namespaces, and ReplicaSets. It also gets `nodes/stats` when `kubeletStats` is on.
+- The events agent can get, list, and watch events.
+- Neither agent can read Secrets. The API key reaches them through a `secretKeyRef`.
+- The node agent mounts `/var/log` read-only. Its only writable host path is `/var/lib/shield360-otelcol`, where it stores file offsets and journal cursors. It runs as root so it can read root-owned log files, but it drops every capability and uses a read-only root file system.
+- The events agent runs as a non-root user and mounts no host paths.
+
+## Linux and Windows servers
+
+The `shield360` CLI installs the agent as a system service: a systemd unit on Linux, or a Windows service. On Linux it reads the systemd journal. On Windows it reads the Application and System Event Log channels. It reads files and syslog only if you ask.
+
+1. Put the collector binary at `/usr/local/bin/shield360-otelcol`, or at `C:\Program Files\Shield360\shield360-otelcol.exe` on Windows. You can build it with `make build` in `src/otel-collector`. You can also pass the binary's path with `--collector`.
+2. Enable system logs as root or an administrator. Pass the project API key in the environment or with `--api-key-file`. Don't pass it as an argument.
+
+<Tabs>
+<Tab title="Linux">
+
+```bash
+sudo SHIELD360_API_KEY=<project API key> shield360 collector system-logs enable \
+  --url https://app.shield360.ai \
+  --file '/var/log/nginx/*.log' --file '/var/log/postgresql/*.log'
+```
+
+</Tab>
+<Tab title="Windows">
+
+```powershell
+$env:SHIELD360_API_KEY = "<project API key>"
+shield360 collector system-logs enable --url https://app.shield360.ai --file 'D:\logs\iis\*.log'
+```
+
+</Tab>
+</Tabs>
+
+| Flag | What it does |
+| --- | --- |
+| `--file` | Reads a log file or glob. Repeat it to add more. Only new lines are read. |
+| `--no-journald` | Linux: skips the systemd journal |
+| `--event-log` | Windows: chooses Event Log channels. The default is `Application,System`. Add `Security` to read the Security channel. |
+| `--syslog-listen 127.0.0.1:5514` | Receives RFC 5424 syslog over UDP |
+| `--host-metrics` | Also sends CPU, memory, disk, and network metrics |
+| `--dry-run` | Prints the configs and service that would be installed, without installing anything |
+
+`shield360 collector system-logs status` shows whether the service is running. `shield360 collector system-logs disable` removes the service, its configs, the key, and its saved state.
+
+The CLI writes these files:
+
+- **Configs.** On Linux, the configs are in `/etc/shield360/system-logs`. On Windows, they are in `%ProgramData%\Shield360\system-logs`.
+- **The API key.** It's in its own file. On Linux only root can read it. On Windows only SYSTEM and Administrators can read it. The key never appears in a config or on a command line.
+- **The systemd unit.** On Linux, the unit lets the service read files and bind a syslog port. It can't gain privileges, and it can't write anywhere except its state directory.
+
+## Limits
+
+- Only new records are read. Records written before the agent started aren't sent.
+- The platform accepts 600 OTLP requests per minute for each API key. Each agent sends a batch at most every 10 seconds per source, so one key can serve about 100 nodes. Use more than one key, such as one for each cluster, for larger fleets.
+- Syslog is received over UDP in RFC 5424 format only. To forward from rsyslog, use `template="RSYSLOG_SyslogProtocol23Format"`.
+- The node agent uses `hostPath` volumes, so the release namespace must allow privileged pods under Pod Security Admission. The events agent meets the `restricted` level.
+- On Docker nodes, set `dockerContainersPath`. Otherwise the agent can't follow the links in `/var/log/pods`.

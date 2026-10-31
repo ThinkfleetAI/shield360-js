@@ -1,0 +1,81 @@
+---
+title: "Zero-code setup: protect an app without changing it"
+sidebarTitle: "Zero-code setup"
+description: "Turn on Shield360 telemetry and runtime protection for Node.js, Python, .NET and Java apps from environment variables and a start-up flag, with no code change and no rebuild."
+---
+
+You can turn on Shield360, telemetry and [runtime protection](https://shield360.ai), without editing or rebuilding your app. Settings come from the usual environment variables, and each language has its own way to load the SDK before the app starts.
+
+Every entry point follows three rules:
+
+- **Fails open.** If start-up fails, it prints one warning and your app starts anyway.
+- **No double start.** If the app also calls the SDK's `init` in code, that call does nothing and logs one line saying so.
+- **Tested end to end** with an app that never imports the SDK.
+
+## Configure
+
+Set these on the process, whatever the language:
+
+```bash
+export SHIELD360_URL=https://app.shield360.ai
+export SHIELD360_API_KEY=<your API key>          # Settings → Developer → API keys
+export OTEL_SERVICE_NAME=orders-api
+export SHIELD360_RASP=monitor                    # or block; leave unset for telemetry only
+export SHIELD360_CONFIG_PUBLIC_KEY='<JWK from the app’s Runtime protection settings>'
+export SHIELD360_IAST=on                         # optional: report vulnerabilities
+```
+
+The API key decides which project environment the app reports to. See [Pin the config key](https://shield360.ai) for where the public key comes from.
+
+## Start the app
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    node --require shield360/register app.js
+    node --import shield360/register app.mjs          # ES modules
+    NODE_OPTIONS="--require shield360/register" npm start
+    ```
+
+    The runtime protection hooks are installed before your app loads, and every `http` and `https` request is captured without middleware. ES module imports are instrumented too. Set `SHIELD360_ESM_HOOK=off` to leave the ES module hook out.
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    shield360-instrument python app.py
+    shield360-instrument uvicorn main:app
+    ```
+
+    With `SHIELD360_RASP` set, the runtime protection middleware is added to Flask, Starlette/FastAPI and Django apps as they are created. Your app's own `sitecustomize` still runs.
+  </Tab>
+  <Tab title=".NET">
+    ```bash
+    dotnet publish src/Shield360.StartupHook/Shield360.StartupHook.csproj -c Release -o /opt/shield360
+    export DOTNET_STARTUP_HOOKS=/opt/shield360/Shield360.StartupHook.dll
+    # .NET 8 and 9 only (harmless on 10):
+    export DOTNET_ADDITIONAL_DEPS=/opt/shield360/Shield360.AdditionalDeps.deps.json
+    export DOTNET_SHARED_STORE=/opt/shield360/store
+    dotnet OrdersApi.dll
+    ```
+
+    On .NET 8 and 9 the two extra variables let the host load the newer framework libraries Shield360 needs.
+  </Tab>
+  <Tab title="Java">
+    ```bash
+    java -javaagent:/path/to/shield360-agent.jar -jar your-app.jar
+    ```
+
+    The agent turns runtime protection on and installs the sink hooks with no code change. Register the `Shield360RaspFilter` servlet filter as well, so runtime protection sees each request's input. The agent doesn't set up telemetry: add `shield360-sdk` and call `Shield360.init` for that.
+  </Tab>
+</Tabs>
+
+Go, PHP and Rust have no zero-code entry point. Go and Rust compile the checks into the app, and PHP starts through its bootstrap. See each SDK's reference.
+
+## On Kubernetes
+
+The [Shield360 operator](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/kubernetes-operator.mdx) applies the same entry points to pods by annotation, without changing their images.
+
+## Next steps
+
+- [Runtime protection](https://shield360.ai)
+- [Kubernetes operator](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/kubernetes-operator.mdx)
+- [SDK configuration](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/configuration.mdx)

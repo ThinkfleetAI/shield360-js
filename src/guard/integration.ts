@@ -188,7 +188,7 @@ export function extractGenericOutput(response: any): string {
 // Methods to guard: (npmPackage, protoPath, methodName, inputExtractor, outputExtractor)
 // ---------------------------------------------------------------------------
 
-interface GuardedMethod {
+export interface GuardedMethod {
   npmPackage: string;
   protoPath: string[];
   methodName: string;
@@ -196,7 +196,7 @@ interface GuardedMethod {
   extractOutput: Extractor;
 }
 
-const GUARDED_METHODS: GuardedMethod[] = [
+export const GUARDED_METHODS: GuardedMethod[] = [
   // OpenAI
   { npmPackage: 'openai', protoPath: ['OpenAI', 'Chat', 'Completions', 'prototype'], methodName: 'create', extractInput: extractOpenAIInput, extractOutput: extractOpenAIOutput },
   { npmPackage: 'openai', protoPath: ['OpenAI', 'Responses', 'prototype'], methodName: 'create', extractInput: extractOpenAIInput, extractOutput: extractOpenAIOutput },
@@ -364,7 +364,7 @@ export function applyPostflight(
 // Prototype resolver
 // ---------------------------------------------------------------------------
 
-function resolveProto(moduleExports: any, protoPath: string[]): any {
+export function resolveProto(moduleExports: any, protoPath: string[]): any {
   let obj = moduleExports;
   for (const key of protoPath) {
     if (obj == null) return null;

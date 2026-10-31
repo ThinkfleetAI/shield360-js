@@ -4,7 +4,8 @@
  * When `init` is given a Shield360 URL and API key (or SHIELD360_URL /
  * SHIELD360_API_KEY), every guard decision other than allow is sent to
  * `/api/guard/events`: which guard, what it did, the kind of data found, in
- * which app, on which host. Never the text that was checked.
+ * which app (its service name, as its telemetry reports it), on which host.
+ * Never the text that was checked.
  *
  * With each report go the values found, masked, and fingerprinted with the
  * organisation's key (fetched from `/api/guard/config`), so a reviewer can see
@@ -19,7 +20,9 @@
 
 import { randomUUID } from 'crypto';
 import { hostname, userInfo } from 'os';
+import type { Guard } from './base';
 import { completeFinding, Finding, setFingerprintKey } from './findings';
+import { HEARTBEAT_EVENT_NAME, heartbeatAttrs, heartbeatEnabled, nextDelay } from './heartbeat';
 
 export const EVENT_NAME = 'shield360.guard.decision';
 const BATCH = 100;
@@ -65,31 +68,84 @@ class Reporter {
   }
 
   private async post(batch: ReportedEvent[]): Promise<void> {
-    const body = JSON.stringify({ resource: this.resource, events: batch });
-    for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
+    await postGuardEvents(this.endpoint, this.apiKey, { resource: this.resource, events: batch }, { label: 'guard report' });
+  }
+
+  private beat: ReturnType<typeof setTimeout> | null = null;
+
+  /** Sends a heartbeat now and then about every five minutes (heartbeat.ts). Never throws. */
+  startHeartbeat(guards: readonly Guard[], sdkVersion: string): void {
+    const send = () => {
       try {
-        const res = await fetch(this.endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${this.apiKey}` },
-          body,
-        });
-        if (res.ok) return;
-        if ([400, 401, 403, 413].includes(res.status)) {
-          console.warn(`Shield360 rejected guard reports: HTTP ${res.status}`);
-          return;
-        }
+        this.add({ name: HEARTBEAT_EVENT_NAME, time: new Date().toISOString(), attrs: heartbeatAttrs(guards, this.applicationName, sdkVersion) });
+        void this.flush().catch(() => undefined);
       } catch {
-        // retried below
+        // a heartbeat is never worth an error in the app
       }
-      await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
-    }
-    console.warn(`Could not deliver ${batch.length} guard report(s) to Shield360`);
+      this.beat = setTimeout(send, nextDelay());
+      this.beat.unref?.();
+    };
+    send();
   }
 
   close(): Promise<void> {
     clearInterval(this.timer);
+    if (this.beat) clearTimeout(this.beat);
+    this.beat = null;
     return this.flush();
   }
+}
+
+export type GuardEventsTransportOptions = {
+  /** What the batch is, for the warning when it cannot be delivered. */
+  label?: string;
+  attempts?: number;
+  /** Delay before retry n is retryDelayMs * n. */
+  retryDelayMs?: number;
+  fetchImpl?: typeof fetch;
+};
+
+/**
+ * Posts one batch to `/api/guard/events`: the transport guard reports, the
+ * heartbeat and runtime-protection (RASP) events share. Retries a few times,
+ * gives up on a refusal, and never throws. Resolves to whether it was accepted.
+ */
+export async function postGuardEvents(
+  endpoint: string,
+  apiKey: string,
+  payload: { resource: Record<string, string>; events: unknown[] },
+  options: GuardEventsTransportOptions = {},
+): Promise<boolean> {
+  const label = options.label ?? 'guard report';
+  const attempts = options.attempts ?? ATTEMPTS;
+  const delay = options.retryDelayMs ?? 500;
+  const send = options.fetchImpl ?? globalThis.fetch;
+  if (typeof send !== 'function') return false;
+  let body: string;
+  try {
+    body = JSON.stringify(payload);
+  } catch {
+    return false;
+  }
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const res = await send(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body,
+      });
+      if (res.ok) return true;
+      if ([400, 401, 403, 413].includes(res.status)) {
+        console.warn(`Shield360 rejected ${label}s: HTTP ${res.status}`);
+        return false;
+      }
+    } catch {
+      // retried below
+    }
+    if (attempt + 1 < attempts) await new Promise((r) => setTimeout(r, delay * (attempt + 1)));
+  }
+  console.warn(`Could not deliver ${payload.events.length} ${label}(s) to Shield360`);
+  return false;
 }
 
 /** Findings go out fingerprinted if the key has arrived since they were made. */
@@ -116,6 +172,10 @@ export function configureGuardReports(opts: {
   applicationName: string;
   environment: string;
   sdkVersion?: string;
+  /** The guards init was given: with them, a heartbeat says which run and in which mode. */
+  guards?: readonly Guard[];
+  /** False turns the heartbeat off (as does SHIELD360_GUARD_HEARTBEAT=false). */
+  heartbeat?: boolean;
 }): boolean {
   if (!opts.url || !opts.apiKey) return false;
   let user = '';
@@ -130,6 +190,8 @@ export function configureGuardReports(opts: {
     'user.name': user,
     'deployment.environment': opts.environment,
     'service.version': opts.sdkVersion || '',
+    // The app, by the service name its telemetry uses (security per app).
+    'service.name': opts.applicationName,
   })) {
     if (v) resource[k] = v;
   }
@@ -137,6 +199,7 @@ export function configureGuardReports(opts: {
   const base = opts.url.replace(/\/+$/, '');
   reporter = new Reporter(`${base}/api/guard/events`, opts.apiKey, resource, opts.applicationName);
   reporter.keyReady = fetchFingerprintKey(base, opts.apiKey);
+  if (opts.guards?.length && heartbeatEnabled(opts.heartbeat)) reporter.startHeartbeat(opts.guards, opts.sdkVersion || '');
   return true;
 }
 
@@ -173,6 +236,7 @@ export function reportGuardDecision(
     attrs: {
       'shield360.guard.event_id': randomUUID().replace(/-/g, ''),
       'shield360.guard.client': reporter.applicationName,
+      'shield360.guard.app': reporter.applicationName,
       'shield360.guard.action': action,
       'shield360.guard.target': phase,
       'shield360.guard.kinds': kinds,

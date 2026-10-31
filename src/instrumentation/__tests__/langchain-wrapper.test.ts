@@ -133,7 +133,7 @@ describe('LangChain wrapper — tool_calls propagation', () => {
     expect(toolArgsCall?.[1]).toEqual(['{"city":"Tokyo"}', '{"expression":"2+2"}']);
   });
 
-  it('passes undefined as toolCalls for text-only completions (preserves existing behaviour)', async () => {
+  it('passes undefined as toolCalls for text-only completions (preserves existing behavior)', async () => {
     const span = makeSpan();
     seedRun(handler, 'run-tc-2', span);
 

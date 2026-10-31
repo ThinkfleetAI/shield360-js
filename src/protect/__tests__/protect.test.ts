@@ -169,6 +169,10 @@ describe('protectTool', () => {
     await expect(broken()).rejects.toThrow(/authorization check failed/);
     const odd = protectTool('pay', fn, { pipeline, mode: 'enforced', authorize: async () => ({ allow: 'yes' as unknown as boolean }) });
     await expect(odd()).rejects.toThrow(ProtectDeniedError);
+    for (const missing of [undefined, null, true]) {
+      const silent = protectTool('pay', fn, { pipeline, mode: 'enforced', authorize: (async () => missing) as never });
+      await expect(silent()).rejects.toThrow(ProtectDeniedError);
+    }
     expect(fn).not.toHaveBeenCalled();
     const yes = protectTool('pay', fn, { pipeline, mode: 'enforced', authorize: async () => ({ allow: true }) });
     await expect(yes()).resolves.toBe('ok');

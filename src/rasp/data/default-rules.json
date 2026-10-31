@@ -1,0 +1,199 @@
+{
+  "version": "2026-10-29.1",
+  "rules": [
+    {
+      "id": "vp.react2shell",
+      "title": "React Server Components Flight deserialization RCE (React2Shell) in a Next.js server action",
+      "cves": [
+        "CVE-2025-55182",
+        "CVE-2025-66478"
+      ],
+      "references": [
+        "https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components",
+        "https://vercel.com/changelog/cve-2025-55182",
+        "https://www.trendmicro.com/en_us/research/25/l/CVE-2025-55182-analysis-poc-itw.html"
+      ],
+      "severity": "critical",
+      "example": false,
+      "runtimes": [
+        "node"
+      ],
+      "action": "block",
+      "match": [
+        {
+          "target": "method",
+          "op": "equals",
+          "values": [
+            "POST"
+          ]
+        },
+        {
+          "target": "header:next-action",
+          "op": "present"
+        },
+        {
+          "target": "body",
+          "op": "contains_any",
+          "values": [
+            "resolved_model",
+            "constructor:constructor",
+            "_formData.get",
+            ":then:constructor",
+            ":__proto__:"
+          ]
+        }
+      ],
+      "note": "Body markers are the request shape Trend Micro documents for public exploits; CVE-2025-66478 is Next.js's identifier for the same flaw."
+    },
+    {
+      "id": "vp.react2shell-flight",
+      "title": "React Server Components Flight deserialization RCE (React2Shell) without a Next-Action header",
+      "cves": [
+        "CVE-2025-55182"
+      ],
+      "references": [
+        "https://react.dev/blog/2025/12/03/critical-security-vulnerability-in-react-server-components"
+      ],
+      "severity": "critical",
+      "example": false,
+      "runtimes": [
+        "node"
+      ],
+      "action": "block",
+      "match": [
+        {
+          "target": "method",
+          "op": "equals",
+          "values": [
+            "POST"
+          ]
+        },
+        {
+          "target": "body",
+          "op": "contains_any",
+          "values": [
+            "resolved_model"
+          ]
+        },
+        {
+          "target": "body",
+          "op": "contains_any",
+          "values": [
+            "constructor:constructor",
+            "_formData.get",
+            ":then:constructor"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vp.next-middleware-bypass",
+      "title": "Next.js middleware authorization bypass with x-middleware-subrequest",
+      "cves": [
+        "CVE-2025-29927"
+      ],
+      "references": [
+        "https://github.com/vercel/next.js/security/advisories/GHSA-f82v-jwr5-mffw"
+      ],
+      "severity": "critical",
+      "example": false,
+      "runtimes": [
+        "node"
+      ],
+      "action": "block",
+      "match": [
+        {
+          "target": "header:x-middleware-subrequest",
+          "op": "present"
+        }
+      ]
+    },
+    {
+      "id": "vp.node-serialize-iife",
+      "title": "node-serialize unserialize() code execution through an immediately invoked function",
+      "cves": [
+        "CVE-2017-5941"
+      ],
+      "references": [
+        "https://nvd.nist.gov/vuln/detail/CVE-2017-5941"
+      ],
+      "severity": "critical",
+      "example": false,
+      "runtimes": [
+        "node"
+      ],
+      "action": "block",
+      "match": [
+        {
+          "target": "request",
+          "op": "contains_any",
+          "values": [
+            "_$$ND_FUNC$$_"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "vp.node2shell-brotli",
+      "title": "Node2Shell: Brotli decoder out-of-bounds write; refuses Brotli-encoded request bodies on unpatched Node.js",
+      "cves": [
+        "CVE-2026-111497"
+      ],
+      "references": [
+        "https://www.ox.security/blog/node-js-brotli-decoder-out-of-bounds-write-rce-cve-2026-111497/",
+        "https://thehackernews.com/2026/10/nodejs-brotli-decoder-bug-could-allow.html"
+      ],
+      "severity": "high",
+      "example": false,
+      "runtimes": [
+        "node"
+      ],
+      "runtimeVersions": {
+        "node": [
+          [
+            "22.0.0",
+            "22.23.4"
+          ],
+          [
+            "24.0.0",
+            "24.22.1"
+          ],
+          [
+            "26.0.0",
+            "26.12.1"
+          ]
+        ]
+      },
+      "action": "block",
+      "match": [
+        {
+          "target": "header:content-encoding",
+          "op": "contains_any",
+          "values": [
+            "br"
+          ],
+          "ignoreCase": true
+        }
+      ],
+      "confirmation": "third-party: OX Security, The Hacker News and Rescana report CVE-2026-111497 and the fixed releases 22.23.4, 24.22.1, 26.12.1; the nodejs.org advisory was not read when this rule was written"
+    },
+    {
+      "id": "vp.example-test-header",
+      "title": "Example rule: matches the test header x-shield360-rasp-test: exploit (not a real advisory)",
+      "cves": [],
+      "references": [],
+      "severity": "info",
+      "example": true,
+      "action": "block",
+      "match": [
+        {
+          "target": "header:x-shield360-rasp-test",
+          "op": "equals",
+          "values": [
+            "exploit"
+          ]
+        }
+      ]
+    }
+  ]
+}

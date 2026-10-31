@@ -19,20 +19,7 @@ export default class Events {
   static setup(options: SetupEventsOptions) {
     try {
       if (!EVENTS_SET) {
-        const existingProvider = logs.getLoggerProvider();
-        const isSDKProvider =
-          existingProvider &&
-          typeof (existingProvider as any).forceFlush === 'function' &&
-          existingProvider.constructor.name !== 'NoopLoggerProvider';
-
-        if (isSDKProvider) {
-          this.loggerProvider = existingProvider as unknown as LoggerProvider;
-        } else {
-          this.loggerProvider = Events.buildLoggerProvider(options);
-          logs.setGlobalLoggerProvider(this.loggerProvider);
-        }
-
-        this.logger = this.loggerProvider.getLogger('shield360');
+        this.logger = this.ensureProvider(options).getLogger('shield360');
         EVENTS_SET = true;
       }
 
@@ -41,6 +28,26 @@ export default class Events {
       console.error('[Events] Failed to initialize events:', e);
       return null;
     }
+  }
+
+  // SHIELD: the provider on its own, so application logs (app-logs.ts) can
+  // share it — same exporter, same destination — even with GenAI events off.
+  static ensureProvider(options: SetupEventsOptions): LoggerProvider {
+    if (!this.loggerProvider) {
+      const existingProvider = logs.getLoggerProvider();
+      const isSDKProvider =
+        existingProvider &&
+        typeof (existingProvider as any).forceFlush === 'function' &&
+        existingProvider.constructor.name !== 'NoopLoggerProvider';
+
+      if (isSDKProvider) {
+        this.loggerProvider = existingProvider as unknown as LoggerProvider;
+      } else {
+        this.loggerProvider = Events.buildLoggerProvider(options);
+        logs.setGlobalLoggerProvider(this.loggerProvider);
+      }
+    }
+    return this.loggerProvider;
   }
 
   private static buildLoggerProvider(options: SetupEventsOptions): LoggerProvider {
@@ -84,5 +91,7 @@ export default class Events {
 
   static resetForTesting() {
     EVENTS_SET = false;
+    (this as any).loggerProvider = undefined;
+    (this as any).logger = undefined;
   }
 }

@@ -1,0 +1,11 @@
+{
+  "source": "Adapted from Baidu OpenRASP plugins/official/plugin.js dnsLogDomains (Apache-2.0); requestbin/interactsh entries added by Shield360.",
+  "domains": [
+    ".vuleye.pw", ".ceye.io", ".exeye.io", ".vcap.me", ".xip.name", ".xip.io", ".sslip.io", ".nip.io", ".oastify.com", ".eyes.sh",
+    ".burpcollaborator.net", ".tu4.org", ".2xss.cc", ".bxss.me", ".godns.vip", ".dnslog.cn", ".0kee.360.cn", ".r87.me", ".ngrok.io",
+    ".xn--9tr.com", ".pipedream.net", ".vxtrans.com", ".vxtrans.link", ".hopto.org", ".zapto.org", ".sytes.net", ".ddns.net",
+    ".canarytokens.com", ".interact.sh", ".oast.fun", ".oast.pro", ".oast.live", ".oast.site", ".oast.online", ".oast.me",
+    ".requestbin.net", ".requestcatcher.com", ".webhook.site"
+  ],
+  "hosts": ["requestb.in", "transfer.sh", "webhook.site"]
+}

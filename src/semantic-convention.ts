@@ -182,6 +182,11 @@ export default class SemanticConvention {
   static SHIELD360_AGENT_VERSION_HASH = 'shield360.agent.version_hash';
   /** Correlate CI / evidence packages with a Trace Governance Passport export. */
   static SHIELD360_GOVERNANCE_REPORT_ID = 'shield360.governance.report_id';
+  // Cost per end customer: the SaaS builder's own customer (tenant) and, optionally,
+  // the end user inside it. Sent as given; Shield360 stores user ids only as a
+  // keyed hash, and tenant ids as given unless the organisation opts to hash them.
+  static SHIELD360_CUSTOMER_TENANT_ID = 'shield360.customer.tenant_id';
+  static SHIELD360_CUSTOMER_USER_ID = 'shield360.customer.user_id';
   static GEN_AI_AGENT_SOURCE = 'gen_ai.agent.source';
   static GEN_AI_AGENT_ACTION_TOOL = 'gen_ai.agent.action.tool';
   static GEN_AI_AGENT_ACTION_TOOL_INPUT = 'gen_ai.agent.action.tool_input';

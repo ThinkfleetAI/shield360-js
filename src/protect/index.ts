@@ -147,17 +147,22 @@ export function protectTool<A extends unknown[], R>(name: string, fn: (...args: 
     }
     if (pipeline) evaluateText(pipeline, describeArgs(...args), GuardPhase.PREFLIGHT, name, mode);
     if (options.authorize) {
-      let verdict: { allow: boolean; reason?: string } | undefined;
+      let verdict: unknown;
+      let failed = false;
       try {
         verdict = await options.authorize(...args);
       } catch (e) {
+        failed = true;
         record({ tool: name, phase: 'authorize', outcome: refuses(mode) ? 'deny' : 'observed', reason: `authorize failed: ${(e as Error)?.message ?? String(e)}` });
         if (refuses(mode)) throw new ProtectDeniedError('authorize_failed', `Shield360 Protect refused ${name}: the authorization check failed and enforced mode does not run unchecked calls.`);
       }
-      if (verdict !== undefined) {
-        const allowed = verdict && verdict.allow === true;
-        record({ tool: name, phase: 'authorize', outcome: allowed ? 'allow' : findingStops(mode, true) ? 'deny' : 'observed', reason: verdict?.reason ?? '' });
-        if (!allowed && findingStops(mode, true)) throw new ProtectDeniedError('not_authorized', `Shield360 Protect refused ${name}: ${verdict?.reason || 'not authorized'}.`);
+      if (!failed) {
+        // Anything but an object saying allow: true -- undefined, null, a bare boolean -- is not an answer in the call's favour.
+        const answer = verdict && typeof verdict === 'object' ? (verdict as { allow?: unknown; reason?: unknown }) : null;
+        const allowed = answer?.allow === true;
+        const reason = typeof answer?.reason === 'string' ? answer.reason : answer ? '' : 'no authorization answer';
+        record({ tool: name, phase: 'authorize', outcome: allowed ? 'allow' : findingStops(mode, true) ? 'deny' : 'observed', reason });
+        if (!allowed && findingStops(mode, true)) throw new ProtectDeniedError('not_authorized', `Shield360 Protect refused ${name}: ${reason || 'not authorized'}.`);
       }
     }
     const result = await fn(...args);

@@ -1,0 +1,190 @@
+---
+title: "Application logs"
+description: "Send your application's own logs to Shield360 alongside its traces, linked by trace and span IDs. Off until you turn it on."
+---
+
+The Shield360 SDKs can send your application's own log records to Shield360, not only the telemetry from instrumented AI calls. The logs go to the same place as your traces, with the same API key, and appear under **Telemetry > Logs**.
+
+Application logs are **off by default**. The SDK sends no log records until you turn them on, because logs often hold data you may not want to leave the process.
+
+## What you get
+
+- **One destination.** Logs use the destination your traces use. With `SHIELD360_URL` and `SHIELD360_API_KEY` set, that is `<SHIELD360_URL>/api/ingest/otlp/v1/logs`, with the API key as the bearer token. If you set `otlp_endpoint` (Python) or `otlpEndpoint` (TypeScript), logs go to `<endpoint>/v1/logs` instead.
+- **Linked to traces.** A record written while a span is active carries that span's trace ID and span ID, so you can go from a log entry straight to the trace it belongs to.
+- **Scrubbed at ingest.** Shield360 removes secrets, such as API keys, tokens, and passwords, from log records as it ingests them, the same way it does for traces. Even so, avoid logging secrets or personal data you do not need.
+- **A level threshold.** Only records at the minimum level or above are sent. The default is `INFO`.
+
+## Turn on application logs
+
+<Tabs>
+<Tab title="Python">
+
+Pass `capture_logs=True` to `shield360.init()`, or set `SHIELD360_CAPTURE_LOGS=true`. The SDK adds one OpenTelemetry logging handler to the root logger, so every `logging` record at the minimum level or above is sent.
+
+```python
+import logging
+import shield360
+
+# The root logger drops INFO records unless you lower its level.
+logging.basicConfig(level=logging.INFO)
+
+shield360.init(
+    service_name="checkout-api",
+    capture_logs=True,   # or SHIELD360_CAPTURE_LOGS=true
+    log_level="INFO",    # or SHIELD360_LOG_LEVEL; the default is INFO
+)
+
+log = logging.getLogger("checkout")
+log.info("order placed", extra={"order_id": "o-123"})
+```
+
+Values passed with `extra` become log attributes. A record logged with `exc_info` (for example, `log.exception(...)`) carries `exception.type`, `exception.message`, and `exception.stacktrace`.
+
+To send only one logger instead of the root logger, leave `capture_logs` off in `init()` and call `shield360.capture_logs()` after it. You can also call it to change the level later:
+
+```python
+shield360.capture_logs(logger="checkout", level=logging.WARNING)
+```
+
+`capture_logs(logger=None, level=logging.INFO)` attaches the handler to the named logger, or to the root logger when no logger is given, and returns the handler. Calling it again for the same logger changes the handler's level instead of adding a second handler, and a record is sent once even if it reaches two of these handlers. `shield360.stop_capturing_logs(logger=None)` removes it.
+
+The handler never sends the SDK's own records (the `shield360` and `opentelemetry` loggers) or records written while logs are being exported, so it cannot feed itself.
+
+</Tab>
+<Tab title="TypeScript">
+
+Pass `captureLogs: true` to `Shield360.init()`, or set `SHIELD360_CAPTURE_LOGS=true`. Then write logs with `Shield360.logger()`:
+
+```typescript
+import Shield360 from 'shield360';
+
+Shield360.init({
+  applicationName: 'checkout-api',
+  captureLogs: true, // or SHIELD360_CAPTURE_LOGS=true
+  logLevel: 'info',  // or SHIELD360_LOG_LEVEL; the default is info
+});
+
+const log = Shield360.logger('checkout');
+
+log.info('order placed', { 'order.id': 'o-123' });
+log.error(new Error('payment declined'), { 'order.id': 'o-123' });
+```
+
+`Shield360.logger(name?)` (also exported as `createLogger`) returns a logger with `debug`, `info`, `warn`, `error`, and `fatal` methods. Each takes a message and optional attributes. The message becomes the log body, and the name becomes the instrumentation scope (`app` when no name is given). Passing an `Error` records `exception.type`, `exception.message`, and `exception.stacktrace`.
+
+While application logs are off, these loggers do nothing. You can create them anywhere, including in libraries, and nothing is sent until the application turns logs on.
+
+The TypeScript SDK does not capture `console.log` and the other `console` methods.
+
+</Tab>
+</Tabs>
+
+## Bridge the logger you already use (TypeScript)
+
+With `captureLogs` on, these bridges send what your existing logger writes, through the same pipeline as `Shield360.logger()`. They add no dependency: you pass in what they need.
+
+<CodeGroup>
+```typescript pino
+import pino from "pino";
+import Shield360 from "shield360";
+
+Shield360.init({ applicationName: "checkout-api", captureLogs: true });
+
+const log = pino({}, pino.multistream([
+  { stream: process.stdout },
+  { stream: Shield360.pinoStream() },
+]));
+log.error({ err: new Error("card declined"), orderId: "o-123" }, "payment failed");
+```
+
+```typescript winston
+import winston from "winston";
+import Transport from "winston-transport";
+import Shield360 from "shield360";
+
+Shield360.init({ applicationName: "checkout-api", captureLogs: true });
+
+const Shield360Transport = Shield360.winstonTransport(Transport);
+const log = winston.createLogger({
+  transports: [new winston.transports.Console(), new Shield360Transport()],
+});
+```
+
+```typescript console
+import Shield360 from "shield360";
+
+Shield360.init({ applicationName: "checkout-api", captureLogs: true });
+Shield360.captureConsole();      // console.debug/log/info/warn/error, still printed
+// Shield360.releaseConsole();   // stop
+```
+</CodeGroup>
+
+pino's `msg`, `level` and `err` become the body, severity and `exception.*` attributes; other fields become attributes. The bridges never capture OpenTelemetry's or Shield360's own messages, drop anything written while a record is being exported, and send at most 500 records a second each (`maxPerSecond`), so a logger that logs about logging cannot loop.
+
+## Go and .NET
+
+The Go and .NET SDKs send traces and metrics. For logs, use OpenTelemetry's own log bridges with an OTLP log exporter pointed at Shield360:
+
+<CodeGroup>
+```go Go (slog)
+import (
+    "go.opentelemetry.io/contrib/bridges/otelslog"
+    "go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+    sdklog "go.opentelemetry.io/otel/sdk/log"
+)
+
+exp, _ := otlploghttp.New(ctx,
+    otlploghttp.WithEndpointURL(os.Getenv("SHIELD360_URL")+"/api/ingest/otlp/v1/logs"),
+    otlploghttp.WithHeaders(map[string]string{"Authorization": "Bearer " + os.Getenv("SHIELD360_API_KEY")}),
+)
+provider := sdklog.NewLoggerProvider(sdklog.WithProcessor(sdklog.NewBatchProcessor(exp)), sdklog.WithResource(res))
+logger := otelslog.NewLogger("checkout-api", otelslog.WithLoggerProvider(provider))
+logger.ErrorContext(ctx, "payment failed", "order.id", "o-123")
+```
+
+```csharp .NET (ILogger)
+builder.Logging.AddOpenTelemetry(o =>
+{
+    o.IncludeFormattedMessage = true;
+    o.SetResourceBuilder(ResourceBuilder.CreateDefault().AddService("checkout-api"));
+    o.AddOtlpExporter(e =>
+    {
+        e.Endpoint = new Uri($"{Environment.GetEnvironmentVariable("SHIELD360_URL")}/api/ingest/otlp/v1/logs");
+        e.Protocol = OtlpExportProtocol.HttpProtobuf;
+        e.Headers = $"Authorization=Bearer {Environment.GetEnvironmentVariable("SHIELD360_API_KEY")}";
+    });
+});
+```
+</CodeGroup>
+
+For zap, use `go.opentelemetry.io/contrib/bridges/otelzap` the same way. Pass the context so records carry the active span's trace ID.
+
+## Without code changes: the OpenTelemetry Collector
+
+To send stdout/stderr, log files or the systemd journal without touching the app, run the OpenTelemetry Collector with the `filelog` receiver (JSON parsing, multi-line stack traces, container logs) or the `journald` receiver, and the `resource` processor setting `service.name`. Ready-to-use configs for a server, Docker, systemd and Kubernetes are in [`examples/app-monitoring`](https://github.com/ThinkfleetAI/Shield360/tree/main/examples/app-monitoring); see [Infrastructure](https://shield360.ai).
+
+## Settings
+
+| Python | TypeScript | Environment variable | Description | Default |
+| ------ | ---------- | -------------------- | ----------- | ------- |
+| `capture_logs` | `captureLogs` | `SHIELD360_CAPTURE_LOGS` | Send application logs to Shield360. An explicit `False` or `false` in code wins over the environment variable. | Off |
+| `log_level` | `logLevel` | `SHIELD360_LOG_LEVEL` | The lowest level sent: `debug`, `info`, `warn`, `error`, or `fatal`. Python also accepts its own level names and numbers. | `INFO` |
+
+<Info>
+If no destination is configured (no `SHIELD360_URL` and `SHIELD360_API_KEY`, and no OTLP endpoint), the SDK writes log records to the console instead, as it does for traces.
+</Info>
+
+## Find your logs
+
+Open **Telemetry > Logs** in Shield360. Each entry shows the time, severity, service, body, and trace and span IDs. Select an entry to see its attributes and follow the link to its trace. For more, see [Logs](https://shield360.ai).
+
+---
+
+<CardGroup cols={2}>
+  <Card title="Configuration" href="/latest/sdk/configuration" icon='gear'>
+    Every SDK setting, with its environment variable
+  </Card>
+  <Card title="Tracing" href="/latest/sdk/features/tracing" icon='diagram-project'>
+    How the SDK traces your AI calls
+  </Card>
+</CardGroup>

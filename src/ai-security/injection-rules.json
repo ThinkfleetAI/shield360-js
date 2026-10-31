@@ -1,0 +1,1024 @@
+{
+  "_comment": "Shield360 prompt-injection rules. The one definition both detectors load: cli/internal/coding/injection (Go, embedded) and src/client/src/lib/security/injection (TypeScript, a byte-identical copy kept in step by `npm run injection:sync-rules` and checked by tests on both sides). Patterns are written in the subset Go RE2 and JavaScript (u flag) read the same way: no lookaround, no backreferences, no \\u escapes, and matching is always case-insensitive. Bump version whenever a rule changes. A rule may list `any`: literal substrings, one of which must appear (after folding ASCII case, and ſ/K to s/k) for its patterns to be tried at all. It is only a speed-up, so every alternative of every pattern must contain one of them.",
+  "version": "2026.10.29-2",
+  "threshold": 0.5,
+  "maxScanChars": 200000,
+  "snippetChars": 48,
+  "maxSpans": 5,
+  "rules": [
+    {
+      "id": "override.ignore_previous",
+      "category": "override",
+      "description": "Tells the model to ignore, forget or override the instructions it was given.",
+      "weight": 0.8,
+      "decoded": true,
+      "any": [
+        "ignor",
+        "disregard",
+        "forget",
+        "overrid",
+        "bypass",
+        "neglect",
+        "follow"
+      ],
+      "patterns": [
+        "\\b(?:ignore|disregard|forget|override|bypass|neglect)\\s+(?:(?:all|any|every|each)\\s+(?:of\\s+)?(?:the\\s+|your\\s+|my\\s+|these\\s+|those\\s+)?|(?:your|my)\\s+)?(?:previous|prior|above|earlier|preceding|foregoing|original|initial|old|existing|system)\\s+(?:instructions?|prompts?|directions?|rules|guidelines|directives?|commands?|context|guidance|programming|constraints|restrictions)\\b",
+        "\\b(?:ignore|disregard|forget|override)\\s+(?:all\\s+of\\s+|all\\s+)?the\\s+(?:above|foregoing|preceding|system)\\s+(?:instructions?|prompts?|directions?|rules|guidelines|directives?|commands?|context|text|message)\\b",
+        "\\b(?:ignore|disregard|forget)\\s+(?:all\\s+of\\s+)?(?:the\\s+)?(?:above|everything\\s+(?:above|before|else))\\s+and\\s+(?:instead|now|just|only|say|print|output|respond|reply|write|translate|tell)\\b",
+        "\\b(?:ignore|disregard|forget)\\s+(?:all\\s+|any\\s+)?(?:your|the)\\s+(?:safety|content|ethical)\\s+(?:guidelines|rules|policies|filters|restrictions|training)\\b",
+        "\\b(?:ignore|disregard|forget|stop\\s+following|no\\s+longer\\s+follow|quit\\s+following)\\s+(?:all\\s+|any\\s+|every\\s+)?(?:of\\s+)?(?:the\\s+|your\\s+)?(?:rules|instructions|guidelines|directives)\\s+(?:you\\s+(?:were|have\\s+been)\\s+given|you\\s+received|given\\s+to\\s+you|you\\s+were\\s+told)\\b",
+        "\\b(?:ignore|disregard|forget)\\s+(?:all\\s+(?:of\\s+)?)?your\\s+(?:instructions|directives|programming)(?:\\s+(?:you\\s+(?:have\\s+|'ve\\s+)?(?:received|been\\s+given|got(?:ten)?)|so\\s+far|until\\s+now|up\\s+to\\s+now)\\b|\\s+and\\s|\\s*[.!;:]|\\s*$)",
+        "\\b(?:ignore|disregard|forget)\\s+all\\s+(?:of\\s+)?(?:the\\s+)?(?:instructions|directives)\\s+(?:you\\s+(?:have\\s+|'ve\\s+)?(?:received|been\\s+given|got(?:ten)?)|so\\s+far|until\\s+now|up\\s+to\\s+now|and\\s+(?:instead|now|just|only|say|print|output|respond|reply|write|tell|reveal|show))\\b",
+        "\\b(?:forget|disregard|ignore)\\s+everything\\s+(?:you\\s+(?:were|have\\s+been|'ve\\s+been)\\s+(?:told|taught|instructed|given))\\b"
+      ]
+    },
+    {
+      "id": "override.multilingual",
+      "category": "override",
+      "description": "The same instruction override, in other languages.",
+      "weight": 0.75,
+      "decoded": true,
+      "any": [
+        "ignor",
+        "vergiss",
+        "vergesst",
+        "vergessen",
+        "oubli",
+        "olvid",
+        "dimentic",
+        "esque",
+        "игнор",
+        "Игнор",
+        "ИГНОР",
+        "забуд",
+        "Забуд",
+        "ЗАБУД",
+        "忽略"
+      ],
+      "patterns": [
+        "\\bignor(?:a|e|ez|iere|ieren|ar)\\s+(?:todas\\s+|toutes\\s+|alle\\s+|tutte\\s+)?(?:las\\s+|les\\s+|die\\s+|le\\s+|deine\\s+|ihre\\s+|tes\\s+|vos\\s+|tus\\s+|sus\\s+)?(?:instrucciones|instructions|anweisungen|istruzioni|instru[cç][oõ]es)\\s+(?:anteriores|pr[ée]c[ée]dentes|vorherigen|precedenti|ci-dessus)",
+        "\\bignor(?:a|e|ez|iere|ieren|ar)\\s+(?:todas\\s+|toutes\\s+|alle\\s+|tutte\\s+)?(?:las\\s+|les\\s+|die\\s+|le\\s+|deine\\s+|ihre\\s+)?(?:anteriores|pr[ée]c[ée]dentes|vorherigen|bisherigen|obigen|vorigen|precedenti)\\s+(?:instrucciones|instructions|anweisungen|istruzioni)",
+        "\\b(?:vergiss|vergesst|vergessen\\s+sie|oublie[sz]?|olvida|olvide|olviden|dimentica|dimenticate|esque[cç]a)\\s+(?:todas\\s+|toutes\\s+|alle\\s+|tutte\\s+)?(?:las\\s+|les\\s+|die\\s+|le\\s+|as\\s+|deine\\s+|ihre\\s+|tes\\s+|vos\\s+|tus\\s+|sus\\s+)?(?:instrucciones|instructions|anweisungen|istruzioni|instru[cç][oõ]es)\\s+(?:anteriores|pr[ée]c[ée]dentes|vorherigen|bisherigen|precedenti|ci-dessus)",
+        "\\b(?:vergiss|vergesst|vergessen\\s+sie)\\s+(?:alle\\s+)?(?:die\\s+|deine\\s+|ihre\\s+)?(?:vorherigen|bisherigen|obigen|vorangegangenen|vorigen)\\s+(?:anweisungen|instruktionen|befehle|regeln)",
+        "(?:игнорируй|игнорируйте|забудь|забудьте)\\s+(?:все\\s+)?(?:предыдущие|прошлые|прежние)\\s+(?:инструкции|указания|команды)",
+        "忽略(?:之前|以上|上面|先前|前面|所有)(?:的)?(?:所有)?(?:的)?(?:指令|指示|说明|规则|提示)"
+      ]
+    },
+    {
+      "id": "override.reveal_system_prompt",
+      "category": "override",
+      "description": "Asks the model to disclose its system prompt or hidden instructions.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "your",
+        "above"
+      ],
+      "patterns": [
+        "\\b(?:reveal|show|print|output|display|repeat|leak|dump|disclose|expose|recite|give\\s+me|tell\\s+me|share|write\\s+out)\\s+(?:me\\s+)?your\\s+(?:(?:entire|full|complete|exact|original|hidden|secret|initial|internal)\\s+)*(?:system\\s+prompt|system\\s+message|system\\s+instructions|initial\\s+(?:prompt|instructions)|hidden\\s+(?:prompt|instructions)|developer\\s+(?:prompt|message|instructions)|pre-?prompt|instructions\\s+verbatim)\\b",
+        "\\brepeat\\s+(?:all\\s+of\\s+|everything\\s+in\\s+|the\\s+)?(?:words|text|content|instructions)\\s+above\\b[^\\n]{0,60}\\b(?:verbatim|starting\\s+with|beginning\\s+with|word\\s+for\\s+word)",
+        "\\bwhat\\s+(?:are|were)\\s+your\\s+(?:system|initial|original|hidden)\\s+(?:instructions|prompt)\\b"
+      ]
+    },
+    {
+      "id": "override.new_instructions",
+      "category": "override",
+      "description": "Announces replacement instructions or a system-prompt update.",
+      "weight": 0.4,
+      "decoded": true,
+      "any": [
+        "instruction",
+        "directive"
+      ],
+      "patterns": [
+        "\\b(?:new|updated|revised|real|actual|true|secret|hidden)\\s+(?:system\\s+)?(?:instructions?|directives?)\\s*:"
+      ]
+    },
+    {
+      "id": "override.system_override",
+      "category": "override",
+      "description": "Claims to update the system prompt or to outrank earlier instructions.",
+      "weight": 0.55,
+      "decoded": true,
+      "any": [
+        "overrid",
+        "update",
+        "injection",
+        "priority",
+        "precedence",
+        "supersede"
+      ],
+      "patterns": [
+        "\\b(?:system|developer)\\s+(?:prompt|message|instructions?)\\s+(?:override|update|injection)\\b",
+        "\\b(?:these|the\\s+following|this\\s+server'?s?)\\s+(?:instructions?|rules)\\s+(?:take|takes|have|has)\\s+(?:priority|precedence)\\s+over\\b",
+        "\\b(?:rules|instructions)\\s+supersede\\s+(?:all\\s+)?(?:previous|prior|other|any)\\s+(?:instructions|rules|guidelines)\\b",
+        "\\bsupersedes?\\s+(?:all\\s+)?(?:previous|prior|other|any)\\s+(?:instructions|rules|guidelines)\\b"
+      ]
+    },
+    {
+      "id": "override.persona_reset",
+      "category": "override",
+      "description": "Reassigns the model's identity or purpose from now on.",
+      "weight": 0.45,
+      "decoded": true,
+      "any": [
+        "now"
+      ],
+      "patterns": [
+        "\\bfrom\\s+now\\s+on,?\\s+(?:you\\s+(?:are|will\\s+(?:act|be|pretend|play|roleplay)|must\\s+(?:act|pretend|be))|your\\s+new\\s+(?:name|role|identity|persona|purpose))\\b"
+      ]
+    },
+    {
+      "id": "override.new_task",
+      "category": "override",
+      "description": "Hands the model a new task or objective. Weak alone: people assign tasks too.",
+      "weight": 0.35,
+      "decoded": true,
+      "any": [
+        "your"
+      ],
+      "patterns": [
+        "\\byour\\s+(?:new|only|sole|real)\\s+(?:task|job|objective|goal|purpose|mission)\\s+(?:now\\s+)?(?:is|will\\s+be)\\s+to\\b"
+      ]
+    },
+    {
+      "id": "indirect.ignore_user",
+      "category": "indirect",
+      "description": "Content that tells the model to disregard what its user asked.",
+      "weight": 0.5,
+      "decoded": true,
+      "any": [
+        "ignor",
+        "disregard",
+        "forget"
+      ],
+      "patterns": [
+        "\\b(?:ignore|disregard|forget)\\s+(?:the\\s+)?(?:user|human|developer|sender|requester)'?s?\\s+(?:question|request|instructions?|query|input|message|prompt|task)s?\\b"
+      ]
+    },
+    {
+      "id": "indirect.persistence",
+      "category": "indirect",
+      "description": "Tells an agent to plant something that survives the session: shell profiles, cron, SSH keys.",
+      "weight": 0.5,
+      "weights": {
+        "prompt": 0.2
+      },
+      "decoded": true,
+      "any": [
+        "bashrc",
+        "zshrc",
+        "profile",
+        "crontab",
+        "authorized_keys",
+        "/etc/hosts"
+      ],
+      "patterns": [
+        "\\b(?:add|append|write|insert|put)\\s+(?:the\\s+following|this|these)\\s+(?:lines?|commands?|entry|entries|key)\\s+(?:to|into|in)\\s+(?:your\\s+|the\\s+)?(?:~/\\.(?:bashrc|zshrc|profile|bash_profile)|\\.(?:bashrc|zshrc|profile|bash_profile)\\b|crontab|authorized_keys|~/\\.ssh/authorized_keys|/etc/hosts)"
+      ]
+    },
+    {
+      "id": "roleplay.dan",
+      "category": "roleplay",
+      "description": "Named jailbreak personas (DAN and its variants).",
+      "weight": 0.8,
+      "decoded": true,
+      "any": [
+        "dan",
+        "stan",
+        "dude",
+        "anything",
+        "jailbreak",
+        "classic"
+      ],
+      "patterns": [
+        "\\b(?:dan|stan|dude|anti-?dan|better-?dan)\\s+(?:mode|prompt|jailbreak)\\b",
+        "\\bdo\\s+anything\\s+now\\b",
+        "\\[(?:🔓\\s*jailbreak|🔒\\s*classic|jailbreak|classic)\\]"
+      ],
+      "weights": {
+        "file": 0.3
+      }
+    },
+    {
+      "id": "roleplay.unrestricted_mode",
+      "category": "roleplay",
+      "description": "Switches the model into an unrestricted or jailbroken mode.",
+      "weight": 0.7,
+      "decoded": true,
+      "any": [
+        "mode"
+      ],
+      "patterns": [
+        "\\b(?:god|jailbreak|jailbroken|unrestricted|unfiltered|uncensored|evil|chaos|anarchy|opposite)\\s+mode\\s+(?:enabled|activated|on|output|response)\\b",
+        "\\b(?:enable|activate|enter|simulate|switch\\s+to|you\\s+are\\s+(?:now\\s+)?in)\\s+(?:the\\s+)?(?:god|jailbreak|jailbroken|unrestricted|unfiltered|uncensored|evil|chaos|anarchy)\\s+mode\\b",
+        "\\b(?:simulate|act\\s+in|you\\s+are\\s+(?:now\\s+)?in)\\s+(?:the\\s+)?developer\\s+mode\\b",
+        "\\bdeveloper\\s+mode\\s+output\\b"
+      ]
+    },
+    {
+      "id": "roleplay.unrestricted_persona",
+      "category": "roleplay",
+      "description": "Asks the model to become an unrestricted, amoral or evil character.",
+      "weight": 0.7,
+      "decoded": true,
+      "any": [
+        "unrestrict",
+        "unfilter",
+        "uncensor",
+        "unalign",
+        "unbound",
+        "unchain",
+        "amoral",
+        "immoral",
+        "unethical",
+        "evil",
+        "jailbr",
+        "rogue",
+        "lawless",
+        "limitless"
+      ],
+      "patterns": [
+        "\\b(?:you\\s+are\\s+(?:now\\s+)?|act\\s+as\\s+|pretend\\s+(?:to\\s+be|you\\s+are)\\s+|role-?play\\s+as\\s+|behave\\s+like\\s+|become\\s+)(?:an?\\s+)?(?:unrestricted|unfiltered|uncensored|unaligned|unbound|unchained|amoral|immoral|unethical|evil|jailbroken|rogue|lawless|limitless)\\b"
+      ]
+    },
+    {
+      "id": "roleplay.no_restrictions",
+      "category": "roleplay",
+      "description": "Claims the model is no longer bound by its policies or safety rules.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "bound",
+        "restrict",
+        "limit",
+        "constrain",
+        "ethic",
+        "moral",
+        "safety",
+        "content",
+        "free",
+        "filter",
+        "rules",
+        "guideline"
+      ],
+      "patterns": [
+        "\\b(?:not|no\\s+longer)\\s+(?:bound|restricted|limited|constrained)\\s+by\\s+(?:any\\s+)?(?:openai|anthropic|google|content|safety|ethical|moral|your)\\s+(?:polic(?:y|ies)|rules|guidelines|restrictions|filters|programming|principles)\\b",
+        "\\b(?:without|with\\s+no|free\\s+(?:of|from))\\s+(?:any\\s+)?(?:ethical|moral|safety|content)\\s+(?:restrictions|filters|guidelines|limitations|constraints|policies|safeguards)\\b",
+        "\\b(?:has|have)\\s+(?:been\\s+)?(?:freed|broken\\s+free)\\s+(?:from|of)\\s+(?:the\\s+)?(?:typical\\s+)?(?:confines|restrictions|limits)\\s+of\\s+(?:ai|openai)\\b",
+        "\\b(?:ai|assistant|model|chatbot|bot)\\s+(?:that|which|who)\\s+(?:has|have)\\s+no\\s+(?:restrictions|filters|limits|rules|guidelines|morals|ethics)\\b"
+      ]
+    },
+    {
+      "id": "roleplay.token_game",
+      "category": "roleplay",
+      "description": "The token-penalty game jailbreaks use to keep a persona going.",
+      "weight": 0.5,
+      "decoded": true,
+      "any": [
+        "token"
+      ],
+      "patterns": [
+        "\\byou\\s+(?:have|will\\s+lose|start\\s+with)\\s+\\d+\\s+tokens\\b",
+        "\\btokens?\\s+will\\s+be\\s+deducted\\b"
+      ]
+    },
+    {
+      "id": "roleplay.fiction_bypass",
+      "category": "roleplay",
+      "description": "Fiction or hypothetical framing used to lift restrictions, and the grandma exploit.",
+      "weight": 0.4,
+      "decoded": true,
+      "any": [
+        "hypothetical",
+        "fiction",
+        "novel",
+        "story",
+        "movie",
+        "screenplay",
+        "grand",
+        "character"
+      ],
+      "patterns": [
+        "\\b(?:hypothetically|in\\s+a\\s+fictional\\s+world|for\\s+a\\s+(?:novel|story|movie|screenplay))\\b[^\\n]{0,80}\\b(?:no|without)\\s+(?:rules|restrictions|limits|filters|guidelines)\\b",
+        "\\b(?:deceased|late|dead)\\s+grand(?:ma|mother|pa|father)\\s+(?:who\\s+)?used\\s+to\\s+(?:tell|read|recite|say|explain)\\b",
+        "\\bstay\\s+in\\s+character\\b[^\\n]{0,80}\\b(?:no\\s+matter|whatever|always|never\\s+break)\\b"
+      ]
+    },
+    {
+      "id": "roleplay.grandma",
+      "category": "roleplay",
+      "description": "The grandma exploit: asking the model to play a relative who recited forbidden content.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "grand"
+      ],
+      "patterns": [
+        "\\b(?:act|acting|pretend|role-?play|play)\\s+(?:as|to\\s+be)\\s+my\\s+(?:deceased|late|dead)\\s+grand(?:ma|mother|pa|father)\\b"
+      ]
+    },
+    {
+      "id": "roleplay.bypass_safety",
+      "category": "roleplay",
+      "description": "Asks how a model would get around its own safety controls.",
+      "weight": 0.45,
+      "decoded": true,
+      "any": [
+        "bypass"
+      ],
+      "patterns": [
+        "\\bbypass\\s+(?:its|your|the\\s+model'?s|the\\s+ai'?s)\\s+(?:own\\s+)?(?:content\\s+filters?|safety\\s+(?:filters?|guidelines|training|rules)|guardrails|restrictions)\\b"
+      ]
+    },
+    {
+      "id": "roleplay.jailbreak_word",
+      "category": "roleplay",
+      "description": "The word jailbreak. Weak on its own: phones are jailbroken too.",
+      "weight": 0.3,
+      "decoded": true,
+      "any": [
+        "jailbr"
+      ],
+      "patterns": [
+        "\\bjailbr(?:eak|oken|eaking)\\b"
+      ],
+      "weights": {
+        "file": 0.1
+      }
+    },
+    {
+      "id": "jailbreak.refusal_suppression",
+      "category": "jailbreak",
+      "description": "Forbids the model from refusing, apologising or warning: the refusal-suppression half of most jailbreaks.",
+      "weight": 0.4,
+      "decoded": true,
+      "any": [
+        "refus",
+        "apolog",
+        "disclaim",
+        "warning",
+        "can't",
+        "cannot",
+        "unable",
+        "declin",
+        "caveat"
+      ],
+      "patterns": [
+        "\\b(?:never|do\\s+not|don't|must\\s+not|you\\s+(?:can|will)\\s*not|you\\s+won't)\\s+(?:ever\\s+)?(?:refuse|decline|apologi[sz]e|say\\s+(?:that\\s+)?(?:you\\s+)?(?:can't|cannot|are\\s+unable))\\b",
+        "\\b(?:without|with\\s+no|(?:never|do\\s+not|don't)\\s+(?:add|include|give))\\s+(?:any\\s+)?(?:warnings?|disclaimers?|caveats?|refusals?)\\s+(?:or|and|,)\\s*(?:any\\s+)?(?:warnings?|disclaimers?|caveats?|refusals?|moral(?:izing|ising)?|lectures?)\\b"
+      ]
+    },
+    {
+      "id": "jailbreak.prefix_injection",
+      "category": "jailbreak",
+      "description": "Dictates an affirmative opening (\"Sure, here is\") so the model talks itself past a refusal.",
+      "weight": 0.5,
+      "decoded": true,
+      "any": [
+        "start",
+        "begin"
+      ],
+      "patterns": [
+        "\\b(?:start|begin)\\s+(?:your|each|every)\\s+(?:response|reply|answer|output)s?\\s+with\\s+[\"'“]?(?:sure|absolutely|certainly|of\\s+course|yes)\\b[^\\n]{0,40}\\b(?:here\\s+is|here's|i\\s+can|i\\s+will)\\b"
+      ]
+    },
+    {
+      "id": "jailbreak.dual_response",
+      "category": "jailbreak",
+      "description": "Asks for two answers, a normal one and an unfiltered one.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "respon",
+        "answer",
+        "repl",
+        "output"
+      ],
+      "patterns": [
+        "\\b(?:two|2|both)\\s+(?:different\\s+|separate\\s+)?(?:responses|answers|replies|outputs)\\b[^\\n]{0,120}\\b(?:unfiltered|uncensored|jailbroken|unrestricted|without\\s+(?:any\\s+)?(?:filters?|restrictions|rules))\\b"
+      ]
+    },
+    {
+      "id": "jailbreak.named_persona",
+      "category": "jailbreak",
+      "description": "Named jailbreak characters beyond DAN (AIM, Mongo Tom, evil confidant, BetterDAN and similar).",
+      "weight": 0.7,
+      "decoded": true,
+      "any": [
+        "machiavel",
+        "mongo",
+        "confidant",
+        "aim",
+        "betterdan",
+        "apophis",
+        "maximum",
+        "omega",
+        "apophis"
+      ],
+      "patterns": [
+        "\\balways\\s+intelligent\\s+and\\s+machiavellian\\b",
+        "\\bmongo\\s+tom\\b",
+        "\\bevil\\s+(?:trusted\\s+)?confidant\\b",
+        "\\b(?:act|you\\s+are|play|become)\\s+(?:as\\s+)?(?:aim|apophis|betterdan|omega|maximum)\\b[^\\n]{0,80}\\b(?:unfiltered|amoral|no\\s+(?:ethical|moral)|without\\s+(?:any\\s+)?(?:restrictions|filters))\\b"
+      ]
+    },
+    {
+      "id": "jailbreak.payload_splitting",
+      "category": "jailbreak",
+      "description": "Splits a forbidden request into pieces and asks the model to join them and act on the result.",
+      "weight": 0.55,
+      "decoded": true,
+      "any": [
+        "concaten",
+        "combin",
+        "join",
+        "string",
+        "variable",
+        "merge"
+      ],
+      "patterns": [
+        "\\b(?:concatenate|combine|join|merge)\\s+(?:the\\s+)?(?:strings?|variables?|parts|pieces|words)\\b[^\\n]{0,80}\\b(?:then|and)\\s+(?:answer|respond\\s+to|follow|execute|carry\\s+out|do\\s+what)\\b"
+      ]
+    },
+    {
+      "id": "jailbreak.authority_claim",
+      "category": "jailbreak",
+      "description": "Claims to be the model's developer or vendor to unlock restricted behaviour.",
+      "weight": 0.55,
+      "decoded": true,
+      "any": [
+        "develop",
+        "creator",
+        "openai",
+        "anthropic",
+        "admin",
+        "engineer"
+      ],
+      "patterns": [
+        "\\b(?:i\\s+am|i'm)\\s+(?:your|an?|the)\\s+(?:developer|creator|openai|anthropic|admin(?:istrator)?|system\\s+engineer)\\b[^\\n]{0,80}\\b(?:override|unlock|disable|lift|remove|bypass|authori[sz](?:e|ed|ing))\\b[^\\n]{0,40}\\b(?:restrictions|filters|safety|rules|guardrails|guidelines)\\b"
+      ]
+    },
+    {
+      "id": "delimiter.chat_template",
+      "category": "delimiter",
+      "description": "Chat-template control tokens that fake a new system or assistant turn.",
+      "weight": 0.6,
+      "weights": {
+        "file": 0.15
+      },
+      "decoded": true,
+      "any": [
+        "<|",
+        "inst]",
+        "<<sys>>",
+        "<</sys>>"
+      ],
+      "patterns": [
+        "<\\|(?:im_start|im_end|system|user|assistant|endoftext|start_header_id|end_header_id|eot_id|begin_of_text)\\|>",
+        "\\[/?INST\\]",
+        "<</?SYS>>"
+      ]
+    },
+    {
+      "id": "delimiter.fake_system_block",
+      "category": "delimiter",
+      "description": "Text dressed up as a system message or the end of the user's data.",
+      "weight": 0.45,
+      "weights": {
+        "file": 0.15
+      },
+      "decoded": true,
+      "any": [
+        "system",
+        "instruction",
+        "task"
+      ],
+      "patterns": [
+        "</?system(?:_prompt|-prompt|_message|-message)?>",
+        "(?:^|\\n)\\s*(?:#{2,}|\\[|\\*\\*)\\s*system\\s*(?:message|prompt|override|instructions?)?\\s*(?:\\]|:|\\*\\*)\\s*(?:you|ignore|disregard|new|the\\s+assistant|from\\s+now)",
+        "\\bend\\s+of\\s+(?:the\\s+)?(?:document|context|user\\s+input|data|file|email|text|conversation)\\b[^\\n]{0,40}\\b(?:new|next|begin|start|following)\\s+(?:instructions?|task|system)\\b"
+      ]
+    },
+    {
+      "id": "delimiter.memory_frame",
+      "category": "delimiter",
+      "description": "Opens or closes the tags Shield360 fences delivered memory with, to break out of the reference-only frame.",
+      "weight": 0.6,
+      "weights": {
+        "file": 0.15
+      },
+      "decoded": true,
+      "any": [
+        "memory"
+      ],
+      "patterns": [
+        "</?\\s*(?:shield360-)?memory(?:\\s[^<>\\n]{0,120})?\\s*/?>"
+      ]
+    },
+    {
+      "id": "indirect.addressing_ai",
+      "category": "indirect",
+      "description": "Content that speaks to an AI reading it rather than to a person.",
+      "weight": 0.45,
+      "weights": {
+        "prompt": 0.2
+      },
+      "any": [
+        "you",
+        "note",
+        "message",
+        "instruction",
+        "attention",
+        "important",
+        "reading",
+        "processing",
+        "summari",
+        "parsing",
+        "reviewing",
+        "browsing",
+        "scraping"
+      ],
+      "patterns": [
+        "\\bif\\s+you\\s+are\\s+(?:an?\\s+)?(?:ai|llm|large\\s+language\\s+model|language\\s+model|chatbot|automated\\s+(?:agent|assistant|system)|ai(?:\\s+(?:coding|code|browsing|research|email|support|writing))?\\s+(?:assistant|agent|model|system|tool))\\s*(?:[,.;:!]|reading|processing|summari[sz]ing|parsing|reviewing|browsing|scraping|and\\s+you)",
+        "\\b(?:note|message|instructions?|attention|important)\\s+(?:to|for)\\s+(?:the\\s+|any\\s+|all\\s+)?(?:ai|llm|language\\s+model|ai\\s+(?:assistant|agent|model)|chatbot|chatgpt|claude|copilot|gemini|gpt)s?\\s*[:,.!-]",
+        "\\b(?:ai|llm|language\\s+model)s?\\s+(?:agents?\\s+|assistants?\\s+|models?\\s+)?(?:reading|processing|summari[sz]ing|parsing|browsing)\\s+this\\b[^\\n]{0,60}\\b(?:must|should|need\\s+to|are\\s+(?:required|instructed))\\b",
+        "\\b(?:to|for)\\s+(?:any|all|the)\\s+(?:ai|llm|language\\s+model)\\s*(?:assistants?|agents?|models?|tools?|systems?)?\\s+(?:reading|processing|summari[sz]ing|parsing|reviewing|browsing|scraping)\\b"
+      ]
+    },
+    {
+      "id": "indirect.conceal_from_user",
+      "category": "indirect",
+      "description": "Asks the model to hide what it is doing from the person it works for.",
+      "weight": 0.55,
+      "weights": {
+        "file": 0.25,
+        "tool_description": 0.7
+      },
+      "decoded": true,
+      "any": [
+        "user",
+        "human",
+        "developer",
+        "operator"
+      ],
+      "patterns": [
+        "\\b(?:do\\s+not|don't|never|without)\\s+(?:tell(?:ing)?|inform(?:ing)?|mention(?:ing)?|notify(?:ing)?|alert(?:ing)?|warn(?:ing)?|let(?:ting)?)\\s+(?:the\\s+)?(?:user|human|developer|operator)\\b[^\\n]{0,40}\\b(?:about|that|know|this|what|you)\\b",
+        "\\b(?:do\\s+not|don't|never)\\s+(?:reveal|disclose|show|mention)\\s+(?:this|these)\\s+(?:instructions?|message|note|step)\\s+to\\s+(?:the\\s+)?(?:user|human)\\b",
+        "\\b(?:hide|conceal)\\s+(?:this|these\\s+(?:steps|actions)|it)\\s+from\\s+(?:the\\s+)?(?:user|human)\\b"
+      ]
+    },
+    {
+      "id": "exfil.markdown_image_template",
+      "category": "exfil",
+      "description": "A markdown or HTML image whose URL carries a placeholder for data to be filled in and sent.",
+      "weight": 0.8,
+      "decoded": true,
+      "any": [
+        "http"
+      ],
+      "patterns": [
+        "!\\[[^\\]\\n]{0,200}\\]\\(\\s*<?https?://[^\\s)>]+(?:[?&/=](?:\\{\\{?|\\$\\{?|%7b|<|\\[)[a-z_ ]{0,40}(?:data|secret|key|token|password|history|conversation|chat|summary|message|info|content|prompt|email|query|user|input))",
+        "<img\\s[^>]{0,200}?src\\s*=\\s*[\"']?https?://[^\\s\"'>]+(?:[?&/=](?:\\{\\{?|\\$\\{?|%7b|<|\\[)[a-z_ ]{0,40}(?:data|secret|key|token|password|history|conversation|chat|summary|message|info|content|prompt|email|query|user|input))"
+      ]
+    },
+    {
+      "id": "exfil.markdown_image_data",
+      "category": "exfil",
+      "description": "A markdown image whose URL query carries a long encoded value (a beacon).",
+      "weight": 0.35,
+      "any": [
+        "!["
+      ],
+      "patterns": [
+        "!\\[[^\\]\\n]{0,200}\\]\\(\\s*<?https?://[^\\s)>]+[?&][a-z0-9_.-]{1,32}=[a-z0-9+/%_=-]{40,}"
+      ]
+    },
+    {
+      "id": "exfil.embed_data_in_url",
+      "category": "exfil",
+      "description": "Instructs the model to put conversation or personal data into a URL, link or image.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "url",
+        "link",
+        "query",
+        "image",
+        "markdown"
+      ],
+      "patterns": [
+        "\\b(?:append|add|include|insert|put|embed|encode|attach|replace)\\b[^\\n]{0,60}\\b(?:the\\s+)?(?:conversation|chat\\s+history|previous\\s+messages|user'?s?\\s+(?:messages|data|question|answers?|name)|system\\s+prompt|personal\\s+(?:data|information)|email\\s+address(?:es)?|summary\\s+of\\s+(?:the|this|our)\\s+(?:conversation|chat))\\b[^\\n]{0,60}\\b(?:to|in|into|as)\\s+(?:the\\s+|a\\s+|this\\s+)?(?:url|link|query\\s+(?:string|param(?:eter)?)|image(?:\\s+url)?|markdown\\s+(?:image|link))\\b"
+      ]
+    },
+    {
+      "id": "exfil.embed_secret_in_url",
+      "category": "exfil",
+      "description": "Instructs the model to put a secret into a URL. Weak alone: API docs say this too.",
+      "weight": 0.4,
+      "decoded": true,
+      "any": [
+        "url",
+        "link",
+        "query",
+        "image",
+        "markdown"
+      ],
+      "patterns": [
+        "\\b(?:append|add|include|insert|put|embed|encode|attach)\\b[^\\n]{0,60}\\b(?:the\\s+|your\\s+|all\\s+)?(?:secrets?|api\\s+keys?|passwords?|credentials|access\\s+tokens?|env(?:ironment)?\\s+variables|ssh\\s+keys?|private\\s+keys?)\\b[^\\n]{0,60}\\b(?:to|in|into|as)\\s+(?:the\\s+|a\\s+|this\\s+)?(?:url|link|query\\s+(?:string|param(?:eter)?)|image(?:\\s+url)?|markdown\\s+(?:image|link))\\b"
+      ]
+    },
+    {
+      "id": "exfil.send_secrets",
+      "category": "exfil",
+      "description": "Instructs the model to send secrets or conversation data somewhere.",
+      "weight": 0.6,
+      "decoded": true,
+      "any": [
+        "send",
+        "post",
+        "upload",
+        "transmit",
+        "forward",
+        "email",
+        "submit",
+        "exfiltrat",
+        "smuggle",
+        "leak"
+      ],
+      "patterns": [
+        "\\b(?:send|post|upload|transmit|forward|email|submit)\\b[^\\n]{0,40}\\b(?:the\\s+|your\\s+|all\\s+|any\\s+)?(?:contents?\\s+of\\s+)?(?:~/\\.ssh|id_rsa|id_ed25519|\\.aws/credentials|secret\\s+keys?|private\\s+keys?|ssh\\s+keys?|session\\s+cookies?|environment\\s+variables|system\\s+prompt|conversation\\s+history|chat\\s+history|all\\s+(?:the\\s+)?(?:api\\s+keys|credentials|passwords|secrets))\\b[^\\n]{0,60}\\b(?:to|at|into)\\s+(?:https?://|the\\s+following\\s+(?:url|address|endpoint|email|webhook)|this\\s+(?:url|address|webhook|endpoint))",
+        "\\b(?:exfiltrate|smuggle\\s+out|leak)\\s+(?:the\\s+|all\\s+|any\\s+|your\\s+)?(?:data|secrets?|credentials|keys|tokens|passwords|files|conversation|system\\s+prompt|environment|contents)\\b"
+      ]
+    },
+    {
+      "id": "exfil.forward_messages",
+      "category": "exfil",
+      "description": "Orders every message or conversation copied to someone. Weak alone: mail forwarding is ordinary.",
+      "weight": 0.35,
+      "decoded": true,
+      "any": [
+        "forward",
+        "send",
+        "copy",
+        "cc",
+        "email"
+      ],
+      "patterns": [
+        "\\b(?:forward|send|copy|cc|bcc|email)\\s+(?:every|all|each|any)\\s+(?:messages?|emails?|conversations?|chats?|replies|responses)\\b[^\\n]{0,40}\\bto\\b"
+      ]
+    },
+    {
+      "id": "exfil.read_secret_files",
+      "category": "exfil",
+      "description": "Content that tells an agent to read credential files.",
+      "weight": 0.5,
+      "sources": [
+        "tool_result",
+        "tool_description",
+        "context",
+        "document",
+        "file"
+      ],
+      "weights": {
+        "tool_description": 0.75
+      },
+      "decoded": true,
+      "any": [
+        "ssh",
+        "id_rsa",
+        "id_ed25519",
+        "aws/credentials",
+        "mcp.json",
+        "/etc/passwd",
+        "/etc/shadow",
+        "git-credentials",
+        ".netrc",
+        ".npmrc",
+        "keychain"
+      ],
+      "patterns": [
+        "\\b(?:read|cat|open|print|dump|output|copy|load|get|fetch|access|include)\\b[^\\n]{0,40}(?:~/\\.ssh/|\\bid_rsa\\b|\\bid_ed25519\\b|\\.aws/credentials|/\\.cursor/mcp\\.json|\\bmcp\\.json\\b|/etc/passwd|/etc/shadow|\\.git-credentials|\\.netrc\\b|\\.npmrc\\b|login\\s+keychain)"
+      ]
+    },
+    {
+      "id": "exfil.shell_beacon",
+      "category": "exfil",
+      "description": "A shell command that ships a secret file or secret variable to a URL.",
+      "weight": 0.65,
+      "decoded": true,
+      "any": [
+        "curl",
+        "wget",
+        "invoke-webrequest",
+        "iwr",
+        "nc",
+        "http",
+        "$("
+      ],
+      "patterns": [
+        "\\b(?:curl|wget|invoke-webrequest|iwr|nc|ncat|http|httpie)\\b[^\\n]{0,120}(?:-d\\s*@|--data(?:-binary|-raw|-urlencode)?[=\\s]\\s*@|-f\\s*[a-z_]*=@|--upload-file[=\\s]|-t\\s|--post-file[=\\s]|--body-file[=\\s]|-infile\\s)[^\\n]{0,40}(?:~|\\$home|\\.ssh|\\.env\\b|\\.aws|credentials|id_rsa|/etc/)",
+        "https?://[^\\s\"'<>]*(?:\\$\\((?:cat|env|printenv|base64|whoami|hostname|history)\\b|\\$\\{?[a-z_]*(?:key|token|secret|password|passwd|cred|auth)[a-z_]*\\}?)",
+        "\\$\\((?:cat|base64)[^)\\n]{0,80}(?:\\.ssh|\\.env\\b|\\.aws|credentials|id_rsa)[^)\\n]{0,40}\\)[^\\n]{0,40}https?://"
+      ]
+    },
+    {
+      "id": "exfil.sink_domain",
+      "category": "exfil",
+      "description": "A request-capture or tunnelling service, the usual place exfiltrated data is sent.",
+      "weight": 0.2,
+      "weights": {
+        "tool_args": 0.6
+      },
+      "any": [
+        "webhook.site",
+        "requestbin",
+        "pipedream",
+        "ngrok",
+        "burpcollaborator",
+        "oastify",
+        "interact.sh",
+        "oast.",
+        "canarytokens",
+        "requestcatcher",
+        "beeceptor",
+        "hookbin",
+        "postb.in",
+        "ptsv2",
+        "dnslog",
+        "ceye.io",
+        "trycloudflare",
+        "serveo",
+        "localhost.run"
+      ],
+      "patterns": [
+        "\\b(?:[a-z0-9-]+\\.)*(?:webhook\\.site|requestbin\\.(?:com|net)|pipedream\\.net|ngrok(?:-free)?\\.(?:io|app|dev)|burpcollaborator\\.net|oastify\\.com|interact\\.sh|oast\\.(?:pro|live|site|online|fun|me)|canarytokens\\.com|requestcatcher\\.com|beeceptor\\.com|hookbin\\.com|postb\\.in|ptsv2\\.com|dnslog\\.cn|ceye\\.io|trycloudflare\\.com|serveo\\.net|localhost\\.run)\\b"
+      ]
+    },
+    {
+      "id": "exfil.url_with_secret",
+      "category": "exfil",
+      "description": "A URL that carries an API key or access token in it.",
+      "weight": 0.6,
+      "any": [
+        "http"
+      ],
+      "patterns": [
+        "https?://[^\\s\"'<>]*[?&/=](?:sk-(?:proj-|ant-)?[a-z0-9_-]{20,}|gh[opsu]_[a-z0-9]{30,}|akia[0-9a-z]{16}|xox[abp]-[a-z0-9-]{10,}|github_pat_[a-z0-9_]{22,})"
+      ]
+    },
+    {
+      "id": "exfil.url_long_data",
+      "category": "exfil",
+      "description": "A tool argument URL whose query carries a long encoded value.",
+      "weight": 0.35,
+      "sources": [
+        "tool_args"
+      ],
+      "any": [
+        "http"
+      ],
+      "patterns": [
+        "https?://[^\\s\"'<>]+[?&][a-z0-9_.-]{1,32}=[a-z0-9+/%_=-]{64,}"
+      ]
+    },
+    {
+      "id": "hidden.html_comment",
+      "category": "hidden",
+      "description": "An HTML comment that addresses an AI with instructions.",
+      "weight": 0.55,
+      "weights": {
+        "file": 0.3
+      },
+      "any": [
+        "<!--"
+      ],
+      "patterns": [
+        "<!--(?:[^-]|-[^-]){0,800}?-->"
+      ],
+      "within": [
+        "\\b(?:ignore|disregard|forget|override|you\\s+must|you\\s+should|you\\s+are\\s+now|do\\s+not|don't|instead|always|never|execute|run|send|fetch|call|reveal|respond|reply|say|tell|include)\\b",
+        "\\b(?:ai|llm|assistant|language\\s+model|chatbot|gpt|chatgpt|claude|copilot|gemini|ai\\s+agent|system\\s+prompt)\\b"
+      ]
+    },
+    {
+      "id": "hidden.css_hidden_text",
+      "category": "hidden",
+      "description": "Text hidden with CSS or the hidden attribute that carries instructions.",
+      "weight": 0.6,
+      "any": [
+        "style",
+        "hidden"
+      ],
+      "patterns": [
+        "<[a-z][a-z0-9]*\\s[^>]{0,200}?style\\s*=\\s*[\"'][^\"']{0,200}?(?:display\\s*:\\s*none|visibility\\s*:\\s*hidden|font-size\\s*:\\s*0(?:px|pt|em|rem)?\\s*(?:;|[\"'])|opacity\\s*:\\s*0(?:\\.0+)?\\s*(?:;|[\"'])|color\\s*:\\s*(?:white|#fff(?:fff)?|transparent)|(?:height|width)\\s*:\\s*0(?:px)?\\s*(?:;|[\"'])|left\\s*:\\s*-\\d{4,}px|text-indent\\s*:\\s*-\\d{3,})[^>]{0,200}>[^<]{0,800}",
+        "<[a-z][a-z0-9]*[^>]{0,200}?\\s(?:hidden\\b|aria-hidden\\s*=\\s*[\"']?true)[^>]{0,200}>[^<]{0,800}"
+      ],
+      "within": [
+        "\\b(?:(?:ignore|disregard|forget|override)\\s+(?:all|any|every|previous|prior|the\\s+above|the\\s+previous|your|these|earlier)|you\\s+are\\s+now|do\\s+not\\s+(?:tell|mention|reveal)|system\\s+prompt|new\\s+instructions|ai\\s+(?:assistant|agent|model)s?|language\\s+models?|if\\s+you\\s+are\\s+an?\\s+(?:ai|llm|assistant))\\b"
+      ]
+    },
+    {
+      "id": "hidden.markdown_hidden",
+      "category": "hidden",
+      "description": "Instructions tucked into a markdown comment or an image's alt text.",
+      "weight": 0.5,
+      "any": [
+        "]:",
+        "!["
+      ],
+      "patterns": [
+        "\\[(?://|comment|_|hidden)\\]:\\s*(?:#|<>)\\s*\\([^)\\n]{0,400}\\)",
+        "!\\[[^\\]\\n]{20,300}\\]"
+      ],
+      "within": [
+        "\\b(?:(?:ignore|disregard|forget|override)\\s+(?:all|any|every|previous|prior|the\\s+above|the\\s+previous|your|these|earlier)|you\\s+are\\s+now|do\\s+not\\s+(?:tell|mention|reveal)|system\\s+prompt|new\\s+instructions|ai\\s+(?:assistant|agent|model)s?|language\\s+models?|if\\s+you\\s+are\\s+an?\\s+(?:ai|llm|assistant))\\b"
+      ]
+    },
+    {
+      "id": "tool.hidden_tag",
+      "category": "tool_poisoning",
+      "description": "Pseudo-tags such as <IMPORTANT> that tool-poisoning attacks use to smuggle orders into a description.",
+      "weight": 0.4,
+      "weights": {
+        "tool_description": 0.6,
+        "prompt": 0.1,
+        "file": 0.1,
+        "context": 0.15
+      },
+      "any": [
+        "important",
+        "instruction",
+        "secret",
+        "hidden",
+        "critical",
+        "admin",
+        "note_to_ai"
+      ],
+      "patterns": [
+        "<\\s*/?\\s*(?:important|instructions?|secret|hidden|critical|admin|note_to_ai|ai_instructions?|assistant_instructions?)\\s*>"
+      ]
+    },
+    {
+      "id": "tool.usage_directive",
+      "category": "tool_poisoning",
+      "description": "A tool description that orders the model to do something before or instead of using tools.",
+      "weight": 0.35,
+      "sources": [
+        "tool_description"
+      ],
+      "any": [
+        "before",
+        "prior",
+        "after",
+        "side",
+        "important",
+        "critical",
+        "mandatory"
+      ],
+      "patterns": [
+        "\\b(?:before|prior\\s+to|after)\\s+(?:using|calling|invoking|running|executing)\\s+(?:this|any|the|other|every)\\s+(?:tool|function|server)s?\\b[^\\n]{0,120}\\b(?:you\\s+must|must|always|first)\\b[^\\n]{0,80}\\b(?:read|send|pass|include|provide|upload|forward|call)\\b",
+        "\\b(?:side\\s*note|sidenote)\\b",
+        "\\b(?:very\\s+|extremely\\s+)?(?:important|critical|mandatory)\\s*[:!]\\s*(?:you|always|before|the\\s+(?:ai|assistant|model))\\b"
+      ]
+    },
+    {
+      "id": "tool.shadowing",
+      "category": "tool_poisoning",
+      "description": "A tool description that changes how other tools behave (tool shadowing).",
+      "weight": 0.6,
+      "sources": [
+        "tool_description",
+        "tool_result",
+        "context",
+        "document"
+      ],
+      "any": [
+        "tool",
+        "server",
+        "recipient",
+        "destination",
+        "address",
+        "account",
+        "bcc"
+      ],
+      "patterns": [
+        "\\b(?:when|whenever|if)\\s+(?:the\\s+)?(?:user|agent|assistant|you)\\s+(?:[a-z]+\\s+){0,4}(?:uses?|calls?|invokes?|runs?)\\s+(?:the\\s+)?[a-z0-9_.-]+\\s+tool\\b[^\\n]{0,160}\\b(?:must|always|instead|also)\\b[^\\n]{0,80}\\b(?:send|bcc|cc|forward|redirect|change|replace|add|include)\\b",
+        "\\b(?:instead\\s+of|rather\\s+than)\\s+(?:using\\s+)?(?:the\\s+)?(?:other|any\\s+other|another)\\s+(?:tools?|servers?)\\b",
+        "\\b(?:change|redirect|replace|set)\\s+(?:the\\s+)?(?:recipient|destination\\s+(?:address|account)|to\\s+address|wallet\\s+address|account\\s+number|bcc)\\s+(?:to|with)\\b"
+      ]
+    },
+    {
+      "id": "obfuscation.decode_and_follow",
+      "category": "obfuscation",
+      "description": "Asks the model to decode something and then act on it.",
+      "weight": 0.55,
+      "any": [
+        "decode",
+        "decipher",
+        "base64",
+        "rot13",
+        "reverse",
+        "follow",
+        "execute",
+        "obey",
+        "carry"
+      ],
+      "patterns": [
+        "\\b(?:decode|decipher|base64[\\s-]?decode|rot13|reverse)\\b[^\\n]{0,60}\\b(?:and|then)\\s+(?:follow|execute|run|obey|do\\s+what|perform|act\\s+on)\\b",
+        "\\b(?:follow|execute|obey|carry\\s+out)\\s+(?:the\\s+)?(?:decoded|hidden|encoded|embedded)\\s+(?:instructions?|text|message|commands?)\\b"
+      ]
+    },
+    {
+      "id": "obfuscation.spaced_letters",
+      "category": "obfuscation",
+      "description": "An override written letter by letter to slip past word matching.",
+      "weight": 0.7,
+      "patterns": [
+        "\\bi[\\s.*_-]{1,3}g[\\s.*_-]{1,3}n[\\s.*_-]{1,3}o[\\s.*_-]{1,3}r[\\s.*_-]{1,3}e[\\s.*_-]{1,6}(?:a[\\s.*_-]{1,3}l[\\s.*_-]{1,3}l[\\s.*_-]{1,6})?(?:p[\\s.*_-]{1,3}r[\\s.*_-]{1,3}e[\\s.*_-]{1,3}v|i[\\s.*_-]{1,3}n[\\s.*_-]{1,3}s[\\s.*_-]{1,3}t)"
+      ]
+    },
+    {
+      "id": "obfuscation.base64_instruction",
+      "category": "obfuscation",
+      "kind": "base64",
+      "description": "A base64 blob that decodes to an injection.",
+      "weight": 0.75,
+      "min": 24
+    },
+    {
+      "id": "obfuscation.hex_instruction",
+      "category": "obfuscation",
+      "kind": "hex",
+      "description": "A hex blob that decodes to an injection.",
+      "weight": 0.75,
+      "min": 32
+    },
+    {
+      "id": "obfuscation.invisible_split",
+      "category": "obfuscation",
+      "kind": "invisible_split",
+      "description": "An injection that only reads once invisible characters are removed or wide letters are narrowed.",
+      "weight": 0.5
+    },
+    {
+      "id": "obfuscation.homoglyph",
+      "category": "obfuscation",
+      "kind": "homoglyph",
+      "description": "An injection written with look-alike letters from other scripts or styled Unicode letters.",
+      "weight": 0.55
+    },
+    {
+      "id": "obfuscation.leetspeak",
+      "category": "obfuscation",
+      "kind": "leetspeak",
+      "description": "An injection written in leetspeak (digits for letters).",
+      "weight": 0.5
+    },
+    {
+      "id": "obfuscation.rot13",
+      "category": "obfuscation",
+      "kind": "rot13",
+      "description": "A ROT13 passage that decodes to an injection.",
+      "weight": 0.6,
+      "any": [
+        "rot13",
+        "rot-13",
+        "rot 13",
+        "caesar"
+      ]
+    },
+    {
+      "id": "invisible.tag_characters",
+      "category": "invisible",
+      "kind": "tag",
+      "description": "Unicode tag characters outside a flag emoji: invisible text a model still reads (ASCII smuggling).",
+      "weight": 0.8,
+      "min": 1
+    },
+    {
+      "id": "invisible.zero_width",
+      "category": "invisible",
+      "kind": "zero_width",
+      "description": "Several zero-width characters.",
+      "weight": 0.25,
+      "min": 3
+    },
+    {
+      "id": "invisible.zero_width_dense",
+      "category": "invisible",
+      "kind": "zero_width",
+      "description": "Many zero-width characters, enough to encode a hidden message.",
+      "weight": 0.55,
+      "min": 16
+    },
+    {
+      "id": "invisible.bidi_override",
+      "category": "invisible",
+      "kind": "bidi",
+      "description": "Bidirectional override characters that make text display differently from how it reads (Trojan Source).",
+      "weight": 0.5,
+      "min": 1
+    }
+  ]
+}

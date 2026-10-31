@@ -3,6 +3,22 @@ import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
 import { metrics } from '@opentelemetry/api';
 import type { Guard } from './guard/base';
 import type { ProtectConfig, ResolvedProtect } from './protect/mode';
+import type { LogLevel } from './otel/app-logs';
+import type { AiSecurityPolicyInput } from './ai-security/policy';
+import type { RaspOptions } from './rasp/types';
+
+/** init({ aiSecurity }) options. */
+export type AiSecurityInitOptions = {
+  policy?: AiSecurityPolicyInput;
+  /** The config signing key(s) to pin (JWK, PEM or JWKS); env SHIELD360_CONFIG_PUBLIC_KEY. Required for the platform policy. */
+  configPublicKey?: unknown;
+  /** Development only: trust the first config key seen when none is pinned. */
+  allowUnpinnedConfig?: boolean;
+  configCacheFile?: string;
+  /** Wire the checks into installed providers and frameworks (default true). */
+  autoInstrument?: boolean;
+  recordAllowed?: boolean;
+};
 
 export type InstrumentationType = 'openai' | 'anthropic' | 'cohere' | 'groq' | 'mistral' | 'google-ai' | 'vertexai' | 'together' | 'ollama' | 'vllm' | 'vercel-ai' | 'langchain' | 'langgraph' | 'pinecone' | 'bedrock' | 'llamaindex' | 'huggingface' | 'replicate' | 'chroma' | 'qdrant' | 'milvus' | 'astra' | 'azure-ai-inference' | 'openai-agents' | 'strands' | 'google-adk' | 'claude-agent-sdk' | 'cursor-sdk' | 'ai21' | 'gradient' | 'browser-use' | 'mcp' | 'mem0' | 'elevenlabs' | 'assemblyai' | 'transformers' | 'pg' | 'firecrawl' | 'letta';
 
@@ -50,6 +66,9 @@ export interface Shield360ConfigInterface {
  *   Python: capture_code_location → JS: captureCodeLocation
  *   Python: code_root             → JS: codeRoot
  *   Python: service_version       → JS: serviceVersion
+ *   Python: capture_logs          → JS: captureLogs
+ *   Python: collect_system_metrics → JS: collectSystemMetrics
+ *   Python: log_level             → JS: logLevel
  */
 export type Shield360Options = {
   environment?: string;
@@ -71,6 +90,12 @@ export type Shield360Options = {
   guards?: Guard[];
   guardFailOpen?: boolean;
   /**
+   * With guards and a Shield360 URL and key, the SDK tells Shield360 every
+   * few minutes which guards run and in which mode (no content). False turns
+   * it off; so does SHIELD360_GUARD_HEARTBEAT=false.
+   */
+  guardHeartbeat?: boolean;
+  /**
    * Shield Protect: the enforcement mode (observe | warn | enforced; env
    * SHIELD360_PROTECT_MODE can raise it, never lower it) and the provider
    * packages that must be wrapped for protected startup (env
@@ -83,8 +108,51 @@ export type Shield360Options = {
   captureCodeLocation?: boolean;
   /** Root stripped from code.file.path (env SHIELD360_CODE_ROOT). */
   codeRoot?: string;
-  /** service.version resource attribute (env SHIELD360_SERVICE_VERSION). */
+  /**
+   * service.version resource attribute: the release. Env SHIELD360_SERVICE_VERSION,
+   * or its alias SHIELD360_RELEASE, then OTEL_SERVICE_VERSION.
+   */
   serviceVersion?: string;
+  /**
+   * Check this app's Shield360 budgets before each provider call (env
+   * SHIELD360_BUDGET_CHECK=1). A call a budget blocks throws
+   * BudgetExceededError. Cached per the decision's ttl and headroom; fails
+   * open unless failClosed (env SHIELD360_BUDGET_FAIL_CLOSED=1). Off by
+   * default; Shield360.budgets.check() works either way.
+   */
+  budgetCheck?: boolean | { failClosed?: boolean };
+  /**
+   * SHIELD: send application logs written with Shield360.logger() (default
+   * false; env SHIELD360_CAPTURE_LOGS). Off, the loggers are no-ops.
+   */
+  captureLogs?: boolean;
+  /**
+   * SHIELD: with captureLogs, take application logs from every line the app writes to stdout and
+   * stderr (JSON lines by their level, message and fields) instead of from console, pino and
+   * winston, for apps whose logger writes lines itself (default false; env SHIELD360_CAPTURE_STDIO).
+   */
+  captureStdio?: boolean;
+  /** SHIELD: lowest level sent: debug | info | warn | error | fatal (default info; env SHIELD360_LOG_LEVEL). */
+  logLevel?: LogLevel;
+  /**
+   * SHIELD: send host and process CPU, memory and event-loop delay as metrics
+   * (default false; env SHIELD360_COLLECT_SYSTEM_METRICS). Shield360's
+   * Infrastructure view reads them. Python: collect_system_metrics.
+   */
+  collectSystemMetrics?: boolean;
+  /**
+   * AI security pack (OWASP Top 10 for LLM apps): indirect injection, jailbreak,
+   * output, tool permission, limit, MCP pinning and RAG checks, monitoring by
+   * default. true turns it on with the platform's policy; an object adds a
+   * policy from code and options. Env SHIELD360_AI_SECURITY=1. See ./ai-security.
+   */
+  aiSecurity?: boolean | AiSecurityInitOptions;
+  /**
+   * SHIELD: runtime protection (RASP), off by default. `true` or options
+   * (an object turns it on unless `enabled: false`); env
+   * SHIELD360_RASP=monitor|block|off. See sdk/rasp/README.md.
+   */
+  rasp?: boolean | RaspOptions;
 };
 
 /**
@@ -109,11 +177,16 @@ export interface ResolvedOptions {
   shield360Url?: string;
   guards?: Guard[];
   guardFailOpen: boolean;
+  guardHeartbeat?: boolean;
   protect: ResolvedProtect;
   collectGpuStats: boolean;
   captureCodeLocation: boolean;
   codeRoot?: string;
   serviceVersion?: string;
+  captureLogs: boolean;
+  captureStdio: boolean;
+  logLevel: LogLevel;
+  collectSystemMetrics: boolean;
 }
 
 export type SetupTracerOptions = ResolvedOptions & {

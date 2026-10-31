@@ -1,0 +1,449 @@
+{
+  "description": "Masking for application logs and RASP snippets; the rules are in sdk/rasp/README.md (Masking).",
+  "text": [
+    {
+      "name": "credential pair",
+      "in": "login password=hunter2 for ann",
+      "out": "login password=*** for ann"
+    },
+    {
+      "name": "JSON credential",
+      "in": "{\"password\":\"hunter2\",\"user\":\"ann\"}",
+      "out": "{\"password\":\"***\",\"user\":\"ann\"}"
+    },
+    {
+      "name": "single-quoted credential",
+      "in": "{'api_key': 'abc123'}",
+      "out": "{'api_key': '***'}"
+    },
+    {
+      "name": "escaped quotes stay inside the value",
+      "in": "password=\"a \\\"quoted\\\" pass\" next",
+      "out": "password=\"***\" next"
+    },
+    {
+      "name": "authorization with a scheme",
+      "in": "Authorization: Bearer abc.def",
+      "out": "Authorization: ***"
+    },
+    {
+      "name": "basic authorization",
+      "in": "authorization=Basic dXNlcjpwYXNz",
+      "out": "authorization=***"
+    },
+    {
+      "name": "a short bearer credential",
+      "in": "sent header Bearer abc123",
+      "out": "sent header Bearer ***"
+    },
+    {
+      "name": "query string",
+      "in": "token=abc&next=1",
+      "out": "token=***&next=1"
+    },
+    {
+      "name": "cookie header",
+      "in": "Cookie: sid=xyz; theme=dark",
+      "out": "Cookie: ***; theme=dark"
+    },
+    {
+      "name": "session id",
+      "in": "session_id=abc123 user=ann",
+      "out": "session_id=*** user=ann"
+    },
+    {
+      "name": "an unterminated quoted value",
+      "in": "secret=\"abc def",
+      "out": "secret=\"***\""
+    },
+    {
+      "name": "token counts are not credentials",
+      "in": "max_tokens=100 input_tokens: 5",
+      "out": "max_tokens=100 input_tokens: 5"
+    },
+    {
+      "name": "author is not auth",
+      "in": "author: Jane",
+      "out": "author: Jane"
+    },
+    {
+      "name": "a long token",
+      "in": "key k3j4h5g6f7d8s9a0q1w2e3r4 used",
+      "out": "key *** used"
+    },
+    {
+      "name": "alphabetic run without digits inside stays",
+      "in": "key abcdefghijklmnopqrstuvwxyz0123 used",
+      "out": "key abcdefghijklmnopqrstuvwxyz0123 used"
+    },
+    {
+      "name": "worktree path",
+      "in": "File \"/Users/ann/Dev/Shield360-logsflags/sdk/python/tests/test_app_logs.py\", line 3",
+      "out": "File \"/Users/ann/Dev/Shield360-logsflags/sdk/python/tests/test_app_logs.py\", line 3"
+    },
+    {
+      "name": "exception class",
+      "in": "java.lang.ArrayIndexOutOfBoundsException: Index 5 out of bounds",
+      "out": "java.lang.ArrayIndexOutOfBoundsException: Index 5 out of bounds"
+    },
+    {
+      "name": "stack frame",
+      "in": "at com.example.orders.OrderService.placeOrder(OrderService.java:42)",
+      "out": "at com.example.orders.OrderService.placeOrder(OrderService.java:42)"
+    },
+    {
+      "name": "file path",
+      "in": "/home/runner/work/app/src/main/python3.12/site-packages/orders/service.py",
+      "out": "/home/runner/work/app/src/main/python3.12/site-packages/orders/service.py"
+    },
+    {
+      "name": "CamelCase identifier",
+      "in": "IllegalStateException",
+      "out": "IllegalStateException"
+    },
+    {
+      "name": "package with digits",
+      "in": "org.apache.logging.log4j.core.appender.AsyncAppender",
+      "out": "org.apache.logging.log4j.core.appender.AsyncAppender"
+    },
+    {
+      "name": ".NET exception",
+      "in": "System.InvalidOperationException",
+      "out": "System.InvalidOperationException"
+    },
+    {
+      "name": "acronyms",
+      "in": "getXMLHttpRequestForUserIdAndName failed",
+      "out": "getXMLHttpRequestForUserIdAndName failed"
+    },
+    {
+      "name": "inner class",
+      "in": "net.shield360.flags.FlagsClient$Poller.run",
+      "out": "net.shield360.flags.FlagsClient$Poller.run"
+    },
+    {
+      "name": "Windows path",
+      "in": "C:\\Users\\ann\\AppData\\Local\\Programs\\app.exe",
+      "out": "C:\\Users\\ann\\AppData\\Local\\Programs\\app.exe"
+    },
+    {
+      "name": "URL",
+      "in": "https://api.example.com/v1/orders/12345?page=2",
+      "out": "https://api.example.com/v1/orders/12345?page=2"
+    },
+    {
+      "name": "key=value that is not a credential",
+      "in": "sort=createdAtDescending",
+      "out": "sort=createdAtDescending"
+    },
+    {
+      "name": "email",
+      "in": "user ann@example.com logged in",
+      "out": "user ann@example.com logged in"
+    },
+    {
+      "name": "prefixed API key",
+      "in": "sk-proj-4f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c",
+      "out": "***"
+    },
+    {
+      "name": "access key id",
+      "in": "AKIAIOSFODNN7EXAMPLE",
+      "out": "***"
+    },
+    {
+      "name": "base64",
+      "in": "dGhpcyBpcyBhIHNlY3JldCB2YWx1ZQ==",
+      "out": "***"
+    },
+    {
+      "name": "base64 with plus",
+      "in": "abc+defghijklmnopqrstuv",
+      "out": "***"
+    },
+    {
+      "name": "hex digest",
+      "in": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "out": "***"
+    },
+    {
+      "name": "JWT",
+      "in": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      "out": "***"
+    },
+    {
+      "name": "UUID",
+      "in": "request 123e4567-e89b-12d3-a456-426614174000 done",
+      "out": "request *** done"
+    },
+    {
+      "name": "GitHub-style token",
+      "in": "ghp_aB3dE6gH9jK2mN5pQ8sT1vW4yZ7cF0hJ3lN6",
+      "out": "***"
+    },
+    {
+      "name": "letters and digits",
+      "in": "ab12cd34ef56gh78ij90kl12mn34",
+      "out": "***"
+    },
+    {
+      "name": "all caps run",
+      "in": "ABCDEFGHIJKLMNOPQRSTUV",
+      "out": "***"
+    },
+    {
+      "name": "short runs stay",
+      "in": "abc123 def456",
+      "out": "abc123 def456"
+    },
+    {
+      "name": "nineteen characters stay",
+      "in": "a1b2c3d4e5f6g7h8i9j",
+      "out": "a1b2c3d4e5f6g7h8i9j"
+    },
+    {
+      "name": "non-ASCII around a credential",
+      "in": "Pässe: password=geheim — ok",
+      "out": "Pässe: password=*** — ok"
+    }
+  ],
+  "limited": [
+    {
+      "name": "a token crossing the cut is masked, not cut",
+      "in": "a a a a a a a a a a 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b",
+      "limit": 30,
+      "out": "a a a a a a a a a a ***"
+    },
+    {
+      "name": "a credential value crossing the cut",
+      "in": "user ann signed in with password=hunter2hunter2",
+      "limit": 40,
+      "out": "user ann signed in with password=***"
+    },
+    {
+      "name": "plain text is only cut",
+      "in": "hello world, hello world, hello world, hello world, ",
+      "limit": 20,
+      "out": "hello world, hello w"
+    }
+  ],
+  "keys": [
+    {
+      "key": "password",
+      "sensitive": true
+    },
+    {
+      "key": "db.password",
+      "sensitive": true
+    },
+    {
+      "key": "userPassword",
+      "sensitive": true
+    },
+    {
+      "key": "x-api-key",
+      "sensitive": true
+    },
+    {
+      "key": "APIKey",
+      "sensitive": true
+    },
+    {
+      "key": "apiKey",
+      "sensitive": true
+    },
+    {
+      "key": "api_key",
+      "sensitive": true
+    },
+    {
+      "key": "accessToken",
+      "sensitive": true
+    },
+    {
+      "key": "refresh_token",
+      "sensitive": true
+    },
+    {
+      "key": "Set-Cookie",
+      "sensitive": true
+    },
+    {
+      "key": "session_id",
+      "sensitive": true
+    },
+    {
+      "key": "sessionId",
+      "sensitive": true
+    },
+    {
+      "key": "client_secret",
+      "sensitive": true
+    },
+    {
+      "key": "otp",
+      "sensitive": true
+    },
+    {
+      "key": "Authorization",
+      "sensitive": true
+    },
+    {
+      "key": "private_key",
+      "sensitive": true
+    },
+    {
+      "key": "jwt",
+      "sensitive": true
+    },
+    {
+      "key": "http.request.header.authorization",
+      "sensitive": true
+    },
+    {
+      "key": "max_tokens",
+      "sensitive": false
+    },
+    {
+      "key": "gen_ai.usage.input_tokens",
+      "sensitive": false
+    },
+    {
+      "key": "author",
+      "sensitive": false
+    },
+    {
+      "key": "session.duration_ms",
+      "sensitive": false
+    },
+    {
+      "key": "order.id",
+      "sensitive": false
+    },
+    {
+      "key": "keyboard",
+      "sensitive": false
+    },
+    {
+      "key": "passport",
+      "sensitive": false
+    },
+    {
+      "key": "monkey",
+      "sensitive": false
+    },
+    {
+      "key": "XMLHttpRequest",
+      "sensitive": false
+    },
+    {
+      "key": "code.file.path",
+      "sensitive": false
+    },
+    {
+      "key": "exception.type",
+      "sensitive": false
+    }
+  ],
+  "values": [
+    {
+      "key": "password",
+      "value": "hunter2",
+      "out": "***"
+    },
+    {
+      "key": "otp",
+      "value": 123456,
+      "out": "***"
+    },
+    {
+      "key": "apiKey",
+      "value": null,
+      "out": null
+    },
+    {
+      "key": "count",
+      "value": 3,
+      "out": 3
+    },
+    {
+      "key": "ok",
+      "value": true,
+      "out": true
+    },
+    {
+      "key": "note",
+      "value": "token=abc in a note",
+      "out": "token=*** in a note"
+    },
+    {
+      "key": "tags",
+      "value": [
+        "password=x",
+        "fine",
+        7
+      ],
+      "out": [
+        "password=***",
+        "fine",
+        7
+      ]
+    },
+    {
+      "key": "user",
+      "value": {
+        "name": "ann",
+        "password": "hunter2",
+        "prefs": {
+          "theme": "dark",
+          "sessionId": "s-1"
+        }
+      },
+      "out": {
+        "name": "ann",
+        "password": "***",
+        "prefs": {
+          "theme": "dark",
+          "sessionId": "***"
+        }
+      }
+    },
+    {
+      "key": "headers",
+      "value": [
+        {
+          "Authorization": "Bearer abc"
+        },
+        {
+          "Accept": "json"
+        }
+      ],
+      "out": [
+        {
+          "Authorization": "***"
+        },
+        {
+          "Accept": "json"
+        }
+      ]
+    }
+  ],
+  "snippets": [
+    {
+      "in": "password=hunter2&x=1",
+      "out": "password=***&x=1"
+    },
+    {
+      "in": "t k3j4h5g6f7d8s9a0q1w2e3r4",
+      "out": "t ***"
+    },
+    {
+      "in": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a ",
+      "out": "a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a a "
+    },
+    {
+      "in": "{\"token\": \"abc\"}",
+      "out": "{\"token\": \"***\"}"
+    }
+  ]
+}

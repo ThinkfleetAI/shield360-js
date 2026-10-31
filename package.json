@@ -1,6 +1,6 @@
 {
   "name": "shield360",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "homepage": "https://github.com/ThinkfleetAI/shield360-js#readme",
   "bugs": {
     "url": "https://github.com/ThinkfleetAI/shield360-js/issues",
@@ -32,6 +32,20 @@
     "./register": {
       "types": "./dist/register.d.ts",
       "default": "./dist/register.js"
+    },
+    "./agents": {
+      "types": "./dist/agents/index.d.ts",
+      "default": "./dist/agents/index.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "agents": [
+        "./dist/agents/index.d.ts"
+      ],
+      "register": [
+        "./dist/register.d.ts"
+      ]
     }
   },
   "engines": {
@@ -69,11 +83,13 @@
     "eslint-plugin-prettier": "^5.1.3",
     "globals": "^15.1.0",
     "jest": "^29.0.0",
+    "pino": "10.3.1",
     "prettier": "^3.2.5",
     "ts-jest": "^29.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.8.3",
-    "typescript-eslint": "^7.8.0"
+    "typescript-eslint": "^7.8.0",
+    "winston": "3.19.0"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.0",
