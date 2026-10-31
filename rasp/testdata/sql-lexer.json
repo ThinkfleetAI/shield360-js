@@ -1,0 +1,1070 @@
+{
+ "comment": "SQL lexer fixtures (sdk/rasp/README.md, SQL lexer). Each case lists the [kind, text] of every token sqlTokens/SQLTokens returns for the query in the dialect. Every SDK runs these; tokens must match exactly.",
+ "cases": [
+  {
+   "name": "oracle q-quote brackets",
+   "dialect": "oracle",
+   "query": "SELECT q'[It's]' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "q'[It's]'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q-quote braces parens angles",
+   "dialect": "oracle",
+   "query": "SELECT Q'{a'b}', q'(c)d)', q'<e>' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "Q'{a'b}'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "q'(c)d)'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "q'<e>'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q-quote same-char delimiter",
+   "dialect": "oracle",
+   "query": "SELECT q'!x'y!', q'#z#' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "q'!x'y!'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "q'#z#'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle nq-quote",
+   "dialect": "oracle",
+   "query": "SELECT nq'[Zoë's]', NQ'|a|' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "nq'[Zoë's]'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "NQ'|a|'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q followed by space is not alternative quoting",
+   "dialect": "oracle",
+   "query": "SELECT q' x' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "q"
+    ],
+    [
+     "string",
+     "' x'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle unterminated q-quote",
+   "dialect": "oracle",
+   "query": "SELECT q'[abc' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "q'[abc' FROM dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q is an identifier elsewhere",
+   "dialect": "oracle",
+   "query": "SELECT q, qq FROM t WHERE q = 'a'",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "q"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "word",
+     "qq"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ],
+    [
+     "word",
+     "WHERE"
+    ],
+    [
+     "word",
+     "q"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "string",
+     "'a'"
+    ]
+   ]
+  },
+  {
+   "name": "oracle national string and no backslash escapes",
+   "dialect": "oracle",
+   "query": "SELECT N'O''Brien', 'C:\\dir\\' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "N'O''Brien'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "'C:\\dir\\'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle E is an identifier",
+   "dialect": "oracle",
+   "query": "SELECT e'x\\' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "e"
+    ],
+    [
+     "string",
+     "'x\\'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle hint and comments",
+   "dialect": "oracle",
+   "query": "SELECT /*+ INDEX(e emp_ix) */ ename -- note\nFROM emp --+ RULE",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/*+ INDEX(e emp_ix) */"
+    ],
+    [
+     "word",
+     "ename"
+    ],
+    [
+     "comment",
+     "-- note"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "emp"
+    ],
+    [
+     "comment",
+     "--+ RULE"
+    ]
+   ]
+  },
+  {
+   "name": "oracle binds",
+   "dialect": "oracle",
+   "query": "SELECT * FROM t WHERE a = :1 AND b = :name AND c = :emp#",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "op",
+     "*"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ],
+    [
+     "word",
+     "WHERE"
+    ],
+    [
+     "word",
+     "a"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "placeholder",
+     ":1"
+    ],
+    [
+     "word",
+     "AND"
+    ],
+    [
+     "word",
+     "b"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "placeholder",
+     ":name"
+    ],
+    [
+     "word",
+     "AND"
+    ],
+    [
+     "word",
+     "c"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "placeholder",
+     ":emp#"
+    ]
+   ]
+  },
+  {
+   "name": "oracle hash and dollar identifiers",
+   "dialect": "oracle",
+   "query": "SELECT emp#, s.sid FROM sys.v$session s, \"Emp\".\"x\"",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "emp#"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "name",
+     "s.sid"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "name",
+     "sys.v$session"
+    ],
+    [
+     "word",
+     "s"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "name",
+     "\"Emp\".\"x\""
+    ]
+   ]
+  },
+  {
+   "name": "db2 hex and graphic strings",
+   "dialect": "db2",
+   "query": "SELECT X'0A1B', x'ff', G'Zoë', g'a''b', N'c' FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "X'0A1B'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "x'ff'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "G'Zoë'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "g'a''b'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "N'c'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "db2 graphic hex, unicode hex and binary hex",
+   "dialect": "db2",
+   "query": "SELECT GX'FF21', ux'0041', BX'00' FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "GX'FF21'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "ux'0041'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "BX'00'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "db2 single letters that are not prefixes",
+   "dialect": "db2",
+   "query": "SELECT B'1', U'2', E'3' FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "B"
+    ],
+    [
+     "string",
+     "'1'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "word",
+     "U"
+    ],
+    [
+     "string",
+     "'2'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "word",
+     "E"
+    ],
+    [
+     "string",
+     "'3'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "db2 parameters and host variables",
+   "dialect": "db2",
+   "query": "SELECT id INTO :hv FROM t WHERE a = ? AND b = :hvRef#",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "id"
+    ],
+    [
+     "word",
+     "INTO"
+    ],
+    [
+     "placeholder",
+     ":hv"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ],
+    [
+     "word",
+     "WHERE"
+    ],
+    [
+     "word",
+     "a"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "placeholder",
+     "?"
+    ],
+    [
+     "word",
+     "AND"
+    ],
+    [
+     "word",
+     "b"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "placeholder",
+     ":hvRef#"
+    ]
+   ]
+  },
+  {
+   "name": "db2 identifiers and comments",
+   "dialect": "db2",
+   "query": "SELECT \"ID\" FROM \"PAY\".\"EMP#\" /* c */ -- d",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "name",
+     "\"ID\""
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "name",
+     "\"PAY\".\"EMP#\""
+    ],
+    [
+     "comment",
+     "/* c */"
+    ],
+    [
+     "comment",
+     "-- d"
+    ]
+   ]
+  },
+  {
+   "name": "mssql bracket identifier with escaped bracket",
+   "dialect": "mssql",
+   "query": "SELECT [a]]b], [c] FROM [dbo].[t]]x] WHERE n = N'x'",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "name",
+     "[a]]b]"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "name",
+     "[c]"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "name",
+     "[dbo].[t]]x]"
+    ],
+    [
+     "word",
+     "WHERE"
+    ],
+    [
+     "word",
+     "n"
+    ],
+    [
+     "op",
+     "="
+    ],
+    [
+     "string",
+     "N'x'"
+    ]
+   ]
+  },
+  {
+   "name": "generic bracket identifier unterminated",
+   "dialect": "generic",
+   "query": "SELECT [abc",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "name",
+     "[abc"
+    ]
+   ]
+  },
+  {
+   "name": "postgres E string keeps backslash escapes",
+   "dialect": "postgres",
+   "query": "SELECT E'a\\'b', 'c' FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "E'a\\'b'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "string",
+     "'c'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "postgres numeric colon is not a bind",
+   "dialect": "postgres",
+   "query": "SELECT a[1:2], b::int FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "a"
+    ],
+    [
+     "op",
+     "["
+    ],
+    [
+     "number",
+     "1"
+    ],
+    [
+     "op",
+     ":"
+    ],
+    [
+     "number",
+     "2"
+    ],
+    [
+     "op",
+     "]"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "word",
+     "b"
+    ],
+    [
+     "op",
+     "::"
+    ],
+    [
+     "word",
+     "int"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "mysql x is an identifier before a string",
+   "dialect": "mysql",
+   "query": "SELECT x'41', b'1' FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "x"
+    ],
+    [
+     "string",
+     "'41'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "word",
+     "b"
+    ],
+    [
+     "string",
+     "'1'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q-quote multibyte delimiter",
+   "dialect": "oracle",
+   "query": "SELECT q'éit's fineé' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "q'éit's fineé'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q-quote astral delimiter",
+   "dialect": "oracle",
+   "query": "SELECT nq'😀a'b😀', 1 FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "string",
+     "nq'😀a'b😀'"
+    ],
+    [
+     "op",
+     ","
+    ],
+    [
+     "number",
+     "1"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle q followed by tab is not alternative quoting",
+   "dialect": "oracle",
+   "query": "SELECT q'\tx' FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "word",
+     "q"
+    ],
+    [
+     "string",
+     "'\tx'"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "oracle block comments do not nest",
+   "dialect": "oracle",
+   "query": "SELECT /* a /* b */ c */ FROM dual",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* a /* b */"
+    ],
+    [
+     "word",
+     "c"
+    ],
+    [
+     "op",
+     "*"
+    ],
+    [
+     "op",
+     "/"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "dual"
+    ]
+   ]
+  },
+  {
+   "name": "db2 nested block comment",
+   "dialect": "db2",
+   "query": "SELECT /* a /* b */ it's */ x FROM t",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* a /* b */ it's */"
+    ],
+    [
+     "word",
+     "x"
+    ],
+    [
+     "word",
+     "FROM"
+    ],
+    [
+     "word",
+     "t"
+    ]
+   ]
+  },
+  {
+   "name": "db2 unterminated nested block comment",
+   "dialect": "db2",
+   "query": "SELECT /* a /* b */ x",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* a /* b */ x"
+    ]
+   ]
+  },
+  {
+   "name": "postgres nested block comment",
+   "dialect": "postgres",
+   "query": "SELECT /* /* x */ y */ 1",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* /* x */ y */"
+    ],
+    [
+     "number",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "mssql nested block comment",
+   "dialect": "mssql",
+   "query": "SELECT /* a /* b */ c */ 1",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* a /* b */ c */"
+    ],
+    [
+     "number",
+     "1"
+    ]
+   ]
+  },
+  {
+   "name": "mysql block comments do not nest",
+   "dialect": "mysql",
+   "query": "SELECT /* a /* b */ 1",
+   "tokens": [
+    [
+     "word",
+     "SELECT"
+    ],
+    [
+     "comment",
+     "/* a /* b */"
+    ],
+    [
+     "number",
+     "1"
+    ]
+   ]
+  }
+ ]
+}

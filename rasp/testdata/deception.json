@@ -1,0 +1,898 @@
+{
+ "version": 1,
+ "comment": "Deception conformance (sdk/rasp/README.md \"Deception\"). Written by hand from the contract; Shield360 Edge (cli/internal/edge) and every SDK run all of it. `config`: the signed config's `deception` value (a missing key means absent) and the block an SDK keeps, or null for none (deception off). `match`: each case's decoys (default: the top-level `decoys`, read through the same config rules) and a request target in origin form (path and optional query); `expect` is the decoy it hits, or null. The path (before the first `?`) is percent-decoded once (every %XX, %2F included; an invalid escape matches nothing), compared byte for byte (UTF-8) and case-sensitively, never cleaned of dot segments or doubled slashes, and matches a decoy that it equals or that it is under on a segment boundary (decoy + \"/\"). The first matching decoy in config order wins.",
+ "decoys": [
+  "/wp-admin",
+  "/.env",
+  "/.git/config",
+  "/phpmyadmin",
+  "/admin/backup.zip",
+  "/caf\u00e9"
+ ],
+ "config": [
+  {
+   "name": "absent",
+   "expect": null
+  },
+  {
+   "name": "null",
+   "deception": null,
+   "expect": null
+  },
+  {
+   "name": "not an object",
+   "deception": "on",
+   "expect": null
+  },
+  {
+   "name": "array",
+   "deception": [
+    "/wp-admin"
+   ],
+   "expect": null
+  },
+  {
+   "name": "paths not a list",
+   "deception": {
+    "paths": "/wp-admin"
+   },
+   "expect": null
+  },
+  {
+   "name": "empty paths",
+   "deception": {
+    "paths": [],
+    "action": "block"
+   },
+   "expect": null
+  },
+  {
+   "name": "defaults",
+   "deception": {
+    "paths": [
+     "/wp-admin",
+     "/.env"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/wp-admin",
+     "/.env"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "block with ttl, trailing slash trimmed once",
+   "deception": {
+    "paths": [
+     "/wp-admin/",
+     "/a//"
+    ],
+    "action": "block",
+    "ttlSeconds": 60
+   },
+   "expect": {
+    "paths": [
+     "/wp-admin",
+     "/a/"
+    ],
+    "action": "block",
+    "ttlSeconds": 60
+   }
+  },
+  {
+   "name": "invalid entries dropped",
+   "deception": {
+    "paths": [
+     "wp-admin",
+     "",
+     "/",
+     "//",
+     5,
+     null,
+     {
+      "p": "/x"
+     },
+     "/ok"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/ok"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "no valid paths",
+   "deception": {
+    "paths": [
+     "wp-admin",
+     "/"
+    ],
+    "action": "block"
+   },
+   "expect": null
+  },
+  {
+   "name": "action is exact",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "action": "BLOCK"
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "action unknown",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "action": "deny"
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "action not a string",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "action": true
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "action monitor",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor"
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl zero",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": 0
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl negative",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": -5
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl string",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": "60"
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl boolean",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": true
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl fraction floored",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": 90.9
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 90
+   }
+  },
+  {
+   "name": "ttl below one second",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": 0.5
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "ttl one second",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": 1
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 1
+   }
+  },
+  {
+   "name": "ttl capped at a day",
+   "deception": {
+    "paths": [
+     "/x"
+    ],
+    "ttlSeconds": 100000
+   },
+   "expect": {
+    "paths": [
+     "/x"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 86400
+   }
+  },
+  {
+   "name": "path over 256 characters dropped",
+   "deception": {
+    "paths": [
+     "/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+     "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "at most 64 paths",
+   "deception": {
+    "paths": [
+     "/d0",
+     "/d1",
+     "/d2",
+     "/d3",
+     "/d4",
+     "/d5",
+     "/d6",
+     "/d7",
+     "/d8",
+     "/d9",
+     "/d10",
+     "/d11",
+     "/d12",
+     "/d13",
+     "/d14",
+     "/d15",
+     "/d16",
+     "/d17",
+     "/d18",
+     "/d19",
+     "/d20",
+     "/d21",
+     "/d22",
+     "/d23",
+     "/d24",
+     "/d25",
+     "/d26",
+     "/d27",
+     "/d28",
+     "/d29",
+     "/d30",
+     "/d31",
+     "/d32",
+     "/d33",
+     "/d34",
+     "/d35",
+     "/d36",
+     "/d37",
+     "/d38",
+     "/d39",
+     "/d40",
+     "/d41",
+     "/d42",
+     "/d43",
+     "/d44",
+     "/d45",
+     "/d46",
+     "/d47",
+     "/d48",
+     "/d49",
+     "/d50",
+     "/d51",
+     "/d52",
+     "/d53",
+     "/d54",
+     "/d55",
+     "/d56",
+     "/d57",
+     "/d58",
+     "/d59",
+     "/d60",
+     "/d61",
+     "/d62",
+     "/d63",
+     "/d64",
+     "/d65",
+     "/d66",
+     "/d67",
+     "/d68",
+     "/d69"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/d0",
+     "/d1",
+     "/d2",
+     "/d3",
+     "/d4",
+     "/d5",
+     "/d6",
+     "/d7",
+     "/d8",
+     "/d9",
+     "/d10",
+     "/d11",
+     "/d12",
+     "/d13",
+     "/d14",
+     "/d15",
+     "/d16",
+     "/d17",
+     "/d18",
+     "/d19",
+     "/d20",
+     "/d21",
+     "/d22",
+     "/d23",
+     "/d24",
+     "/d25",
+     "/d26",
+     "/d27",
+     "/d28",
+     "/d29",
+     "/d30",
+     "/d31",
+     "/d32",
+     "/d33",
+     "/d34",
+     "/d35",
+     "/d36",
+     "/d37",
+     "/d38",
+     "/d39",
+     "/d40",
+     "/d41",
+     "/d42",
+     "/d43",
+     "/d44",
+     "/d45",
+     "/d46",
+     "/d47",
+     "/d48",
+     "/d49",
+     "/d50",
+     "/d51",
+     "/d52",
+     "/d53",
+     "/d54",
+     "/d55",
+     "/d56",
+     "/d57",
+     "/d58",
+     "/d59",
+     "/d60",
+     "/d61",
+     "/d62",
+     "/d63"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "invalid entries do not count toward the 64",
+   "deception": {
+    "paths": [
+     "nope",
+     "nope",
+     "nope",
+     "/d0",
+     "/d1",
+     "/d2",
+     "/d3",
+     "/d4",
+     "/d5",
+     "/d6",
+     "/d7",
+     "/d8",
+     "/d9",
+     "/d10",
+     "/d11",
+     "/d12",
+     "/d13",
+     "/d14",
+     "/d15",
+     "/d16",
+     "/d17",
+     "/d18",
+     "/d19",
+     "/d20",
+     "/d21",
+     "/d22",
+     "/d23",
+     "/d24",
+     "/d25",
+     "/d26",
+     "/d27",
+     "/d28",
+     "/d29",
+     "/d30",
+     "/d31",
+     "/d32",
+     "/d33",
+     "/d34",
+     "/d35",
+     "/d36",
+     "/d37",
+     "/d38",
+     "/d39",
+     "/d40",
+     "/d41",
+     "/d42",
+     "/d43",
+     "/d44",
+     "/d45",
+     "/d46",
+     "/d47",
+     "/d48",
+     "/d49",
+     "/d50",
+     "/d51",
+     "/d52",
+     "/d53",
+     "/d54",
+     "/d55",
+     "/d56",
+     "/d57",
+     "/d58",
+     "/d59",
+     "/d60",
+     "/d61",
+     "/d62",
+     "/d63",
+     "/d64",
+     "/d65",
+     "/d66",
+     "/d67",
+     "/d68",
+     "/d69"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/d0",
+     "/d1",
+     "/d2",
+     "/d3",
+     "/d4",
+     "/d5",
+     "/d6",
+     "/d7",
+     "/d8",
+     "/d9",
+     "/d10",
+     "/d11",
+     "/d12",
+     "/d13",
+     "/d14",
+     "/d15",
+     "/d16",
+     "/d17",
+     "/d18",
+     "/d19",
+     "/d20",
+     "/d21",
+     "/d22",
+     "/d23",
+     "/d24",
+     "/d25",
+     "/d26",
+     "/d27",
+     "/d28",
+     "/d29",
+     "/d30",
+     "/d31",
+     "/d32",
+     "/d33",
+     "/d34",
+     "/d35",
+     "/d36",
+     "/d37",
+     "/d38",
+     "/d39",
+     "/d40",
+     "/d41",
+     "/d42",
+     "/d43",
+     "/d44",
+     "/d45",
+     "/d46",
+     "/d47",
+     "/d48",
+     "/d49",
+     "/d50",
+     "/d51",
+     "/d52",
+     "/d53",
+     "/d54",
+     "/d55",
+     "/d56",
+     "/d57",
+     "/d58",
+     "/d59",
+     "/d60",
+     "/d61",
+     "/d62",
+     "/d63"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  },
+  {
+   "name": "non-ASCII path kept",
+   "deception": {
+    "paths": [
+     "/caf\u00e9"
+    ]
+   },
+   "expect": {
+    "paths": [
+     "/caf\u00e9"
+    ],
+    "action": "monitor",
+    "ttlSeconds": 900
+   }
+  }
+ ],
+ "match": [
+  {
+   "target": "/wp-admin",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/wp-admin/",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/wp-admin/install.php",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/wp-admin?x=1",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/wp-admin/?x=/y",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/wp-admins",
+   "expect": null
+  },
+  {
+   "target": "/wp-adminx/a",
+   "expect": null
+  },
+  {
+   "target": "/WP-ADMIN",
+   "expect": null
+  },
+  {
+   "target": "/Wp-Admin/",
+   "expect": null
+  },
+  {
+   "target": "/wp-admin+",
+   "expect": null
+  },
+  {
+   "target": "/wp%2Dadmin",
+   "expect": "/wp-admin"
+  },
+  {
+   "target": "/.env",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env/",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env?",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env.bak",
+   "expect": null
+  },
+  {
+   "target": "/.envx",
+   "expect": null
+  },
+  {
+   "target": "/%2Eenv",
+   "expect": "/.env"
+  },
+  {
+   "target": "/%2eenv",
+   "expect": "/.env"
+  },
+  {
+   "target": "/%252Eenv",
+   "expect": null
+  },
+  {
+   "target": "//.env",
+   "expect": null
+  },
+  {
+   "target": "/./.env",
+   "expect": null
+  },
+  {
+   "target": "/x/../.env",
+   "expect": null
+  },
+  {
+   "target": "/.env%00",
+   "expect": null
+  },
+  {
+   "target": "/.env%2F",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env%2fx",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env%",
+   "expect": null
+  },
+  {
+   "target": "/.env%2",
+   "expect": null
+  },
+  {
+   "target": "/.env%zz",
+   "expect": null
+  },
+  {
+   "target": "/wp-admin/%zz",
+   "expect": null
+  },
+  {
+   "target": "/wp-admin/%G0",
+   "expect": null
+  },
+  {
+   "target": "/.env/%FF",
+   "expect": "/.env"
+  },
+  {
+   "target": "/.env;jsessionid=1",
+   "expect": null
+  },
+  {
+   "target": "/.git/config",
+   "expect": "/.git/config"
+  },
+  {
+   "target": "/.git",
+   "expect": null
+  },
+  {
+   "target": "/.git/",
+   "expect": null
+  },
+  {
+   "target": "/.git%2Fconfig",
+   "expect": "/.git/config"
+  },
+  {
+   "target": "/.git%2fconfig",
+   "expect": "/.git/config"
+  },
+  {
+   "target": "/.git/config/x",
+   "expect": "/.git/config"
+  },
+  {
+   "target": "/.git/configx",
+   "expect": null
+  },
+  {
+   "target": "/phpmyadmin/index.php?lang=en",
+   "expect": "/phpmyadmin"
+  },
+  {
+   "target": "/phpMyAdmin",
+   "expect": null
+  },
+  {
+   "target": "/admin/backup.zip",
+   "expect": "/admin/backup.zip"
+  },
+  {
+   "target": "/admin",
+   "expect": null
+  },
+  {
+   "target": "/admin/backup.zipx",
+   "expect": null
+  },
+  {
+   "target": "/caf%C3%A9",
+   "expect": "/caf\u00e9"
+  },
+  {
+   "target": "/caf%c3%a9/menu",
+   "expect": "/caf\u00e9"
+  },
+  {
+   "target": "/CAF%C3%89",
+   "expect": null
+  },
+  {
+   "target": "/caf",
+   "expect": null
+  },
+  {
+   "target": "/",
+   "expect": null
+  },
+  {
+   "target": "/?q=/wp-admin",
+   "expect": null
+  },
+  {
+   "target": "/search?next=/.env",
+   "expect": null
+  },
+  {
+   "decoys": [
+    "/a",
+    "/a/b"
+   ],
+   "target": "/a/b",
+   "expect": "/a"
+  },
+  {
+   "decoys": [
+    "/a/b",
+    "/a"
+   ],
+   "target": "/a/b",
+   "expect": "/a/b"
+  },
+  {
+   "decoys": [
+    "/wp-admin/"
+   ],
+   "target": "/wp-admin",
+   "expect": "/wp-admin"
+  },
+  {
+   "decoys": [
+    "/wp-admin/"
+   ],
+   "target": "/wp-admin/x",
+   "expect": "/wp-admin"
+  },
+  {
+   "decoys": [
+    "/a//"
+   ],
+   "target": "/a/",
+   "expect": "/a/"
+  },
+  {
+   "decoys": [
+    "/a/b"
+   ],
+   "target": "/a/",
+   "expect": null
+  },
+  {
+   "decoys": [
+    "/a//"
+   ],
+   "target": "/a//x",
+   "expect": "/a/"
+  }
+ ]
+}

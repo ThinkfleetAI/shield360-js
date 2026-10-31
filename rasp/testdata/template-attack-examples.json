@@ -1,0 +1,124 @@
+{
+  "comment": "Template-source detection fixtures in the attack-examples.json schema, run by every SDK with the shared engine table (sdk/rasp/rules/template-engines.json). At most one minimal, harmless expression per engine family; never execute fixture source.",
+  "cases": [
+    {
+      "name": "handlebars input introduces template expression",
+      "check": "template",
+      "engine": "handlebars",
+      "template": "Hello {{name}}",
+      "inputs": [
+        {
+          "value": "{{name}}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "ejs input introduces template expression",
+      "check": "template",
+      "engine": "ejs",
+      "template": "Hello <%= 1 + 2 %>",
+      "inputs": [
+        {
+          "value": "<%= 1 + 2 %>",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "jinja input introduces template expression",
+      "check": "template",
+      "engine": "jinja2",
+      "template": "Hello {{ 7 * 7 }}",
+      "inputs": [
+        {
+          "value": "{{ 7 * 7 }}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "go template input introduces template action",
+      "check": "template",
+      "engine": "gotemplate",
+      "template": "Hello {{ len \"abc\" }}",
+      "inputs": [
+        {
+          "value": "{{ len \"abc\" }}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "freemarker input introduces template interpolation",
+      "check": "template",
+      "engine": "freemarker",
+      "template": "Hello ${7 * 7}",
+      "inputs": [
+        {
+          "value": "${7 * 7}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "smarty input introduces template tag",
+      "check": "template",
+      "engine": "smarty",
+      "template": "Hello {7 * 7}",
+      "inputs": [
+        {
+          "value": "{7 * 7}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    },
+    {
+      "name": "blade input introduces template echo",
+      "check": "template",
+      "engine": "blade",
+      "template": "Hello {!! 7 * 7 !!}",
+      "inputs": [
+        {
+          "value": "{!! 7 * 7 !!}",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "code_injection",
+        "rule": "code.template_injection"
+      }
+    }
+  ]
+}

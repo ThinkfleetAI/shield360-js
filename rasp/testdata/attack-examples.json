@@ -1,0 +1,398 @@
+{
+  "comment": "Textbook attack cases, one shape per check, reviewed and added by the repository owner (drafted with ChatGPT, reviewed 2026-10-29; names and fields aligned to the contract). Defensive detection fixtures only: commands are harmless (echo rasp-test), addresses and paths are test targets, deserialization cases are descriptions or the bare marker a rule looks for (an empty-object YAML tag, the node-serialize marker without a function), not serialized payloads. Never execute these cases or make network requests with them. Each entry uses the same fields as the matching section of benign.json plus \"check\" and \"expect\": {\"attack\", \"rule\"}. Every SDK's shared RASP test runner loads this file and asserts each entry is detected. The code (eval) check has no cases yet. The Oracle and DB2 SQL cases (with \"dialect\") were added 2026-10-30.",
+  "cases": [
+    {
+      "name": "Thumbnail filename adds a shell command",
+      "check": "command",
+      "command": "convert 'photo.jpg'; echo rasp-test; # ' -thumbnail 100x100 thumbnail.jpg",
+      "inputs": [
+        {
+          "value": "photo.jpg'; echo rasp-test; # ",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "command_injection",
+        "rule": "cmdi.userinput"
+      }
+    },
+    {
+      "name": "Filename contains command substitution",
+      "check": "command",
+      "command": "convert \"$(echo rasp-test).jpg\" -thumbnail 100x100 thumbnail.jpg",
+      "inputs": [
+        {
+          "value": "$(echo rasp-test).jpg",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "command_injection",
+        "rule": "cmdi.userinput"
+      },
+      "note": "Rules are checked in contract order; cmdi.userinput (input spans >= 2 shell tokens) fires before cmdi.substitution."
+    },
+    {
+      "name": "Request supplies the entire command",
+      "check": "command",
+      "command": "uptime",
+      "inputs": [
+        {
+          "value": "uptime",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "command_injection",
+        "rule": "cmdi.full"
+      }
+    },
+    {
+      "name": "Product search contains a tautology",
+      "check": "sql",
+      "query": "SELECT * FROM products WHERE name = '' OR '1'='1'",
+      "inputs": [
+        {
+          "value": "' OR '1'='1",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "Product search comments out the closing quote",
+      "check": "sql",
+      "query": "SELECT * FROM products WHERE name = 'sample' OR 1=1 -- '",
+      "inputs": [
+        {
+          "value": "sample' OR 1=1 -- ",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "Oracle product search adds a tautology",
+      "check": "sql",
+      "dialect": "oracle",
+      "query": "SELECT * FROM products WHERE name = 'sample' OR 'a'='a'",
+      "inputs": [
+        {
+          "value": "sample' OR 'a'='a",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "Oracle q-quoted search closes the quote early",
+      "check": "sql",
+      "dialect": "oracle",
+      "query": "SELECT * FROM products WHERE name = q'[sample]' OR 1=1 -- ]'",
+      "inputs": [
+        {
+          "value": "sample]' OR 1=1 -- ",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "DB2 order lookup adds a numeric tautology",
+      "check": "sql",
+      "dialect": "db2",
+      "query": "SELECT * FROM orders WHERE id = 1 OR 1=1 FETCH FIRST 10 ROWS ONLY",
+      "inputs": [
+        {
+          "value": "1 OR 1=1",
+          "key": "query.id",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "DB2 product search comments out the rest",
+      "check": "sql",
+      "dialect": "db2",
+      "query": "SELECT * FROM products WHERE name = 'sample' -- ' FETCH FIRST 10 ROWS ONLY",
+      "inputs": [
+        {
+          "value": "sample' -- ",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "sql_injection",
+        "rule": "sqli.userinput"
+      }
+    },
+    {
+      "name": "Upload download escapes to a sibling directory",
+      "check": "path",
+      "path": "/srv/app/uploads/../private/fixture.txt",
+      "roots": [
+        "/srv/app/uploads"
+      ],
+      "inputs": [
+        {
+          "value": "../private/fixture.txt",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "path_traversal",
+        "rule": "path.traversal"
+      }
+    },
+    {
+      "name": "Upload download traverses multiple parents",
+      "check": "path",
+      "path": "/srv/app/uploads/../../fixtures/example.txt",
+      "roots": [
+        "/srv/app/uploads"
+      ],
+      "inputs": [
+        {
+          "value": "../../fixtures/example.txt",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "path_traversal",
+        "rule": "path.traversal"
+      }
+    },
+    {
+      "name": "URL preview targets loopback",
+      "check": "ssrf",
+      "url": "http://127.0.0.1:8080/fixture",
+      "inputs": [
+        {
+          "value": "http://127.0.0.1:8080/fixture",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "ssrf",
+        "rule": "ssrf.internal"
+      }
+    },
+    {
+      "name": "URL preview targets a private address",
+      "check": "ssrf",
+      "url": "http://10.0.0.1/fixture",
+      "inputs": [
+        {
+          "value": "http://10.0.0.1/fixture",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "ssrf",
+        "rule": "ssrf.internal"
+      }
+    },
+    {
+      "name": "Product filter introduces a not-equal operator",
+      "check": "nosql",
+      "filter": {
+        "name": {
+          "$ne": null
+        }
+      },
+      "body": {
+        "name": {
+          "$ne": null
+        }
+      },
+      "query": {},
+      "expect": {
+        "attack": "nosql_injection",
+        "rule": "nosqli.operator"
+      }
+    },
+    {
+      "name": "Product filter introduces a regex operator",
+      "check": "nosql",
+      "filter": {
+        "name": {
+          "$regex": "."
+        }
+      },
+      "body": {
+        "name": {
+          "$regex": "."
+        }
+      },
+      "query": {},
+      "expect": {
+        "attack": "nosql_injection",
+        "rule": "nosqli.operator"
+      }
+    },
+    {
+      "name": "XML import declares a local external entity",
+      "check": "xml",
+      "xml": "<!DOCTYPE product [<!ENTITY fixture SYSTEM \"file:///srv/app/fixtures/example.txt\">]><product>&fixture;</product>",
+      "inputs": [
+        {
+          "value": "<!DOCTYPE product [<!ENTITY fixture SYSTEM \"file:///srv/app/fixtures/example.txt\">]><product>&fixture;</product>",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "xxe",
+        "rule": "xxe.file"
+      },
+      "resolvesExternal": true
+    },
+    {
+      "name": "XML import declares a remote external entity",
+      "check": "xml",
+      "xml": "<!DOCTYPE product [<!ENTITY fixture SYSTEM \"https://example.invalid/fixture.txt\">]><product>&fixture;</product>",
+      "inputs": [
+        {
+          "value": "<!DOCTYPE product [<!ENTITY fixture SYSTEM \"https://example.invalid/fixture.txt\">]><product>&fixture;</product>",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "xxe",
+        "rule": "xxe.external_entity"
+      },
+      "resolvesExternal": true
+    },
+    {
+      "name": "Request data reaches a pickle loader",
+      "check": "deser",
+      "format": "pickle",
+      "data": "Description only: request-controlled pickle data passed to an unsafe loader.",
+      "inputs": [
+        {
+          "value": "Description only: request-controlled pickle data passed to an unsafe loader.",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "deserialization",
+        "rule": "deser.pickle"
+      }
+    },
+    {
+      "name": "Request data reaches an unsafe YAML loader",
+      "check": "deser",
+      "format": "yaml",
+      "data": "config: !!python/object:builtins.object {}\n",
+      "inputs": [
+        {
+          "value": "config: !!python/object:builtins.object {}\n",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "deserialization",
+        "rule": "deser.yaml"
+      }
+    },
+    {
+      "name": "Request data reaches node-serialize",
+      "check": "deser",
+      "format": "node_serialize",
+      "data": "{\"note\":\"_$$ND_FUNC$$_\"}",
+      "inputs": [
+        {
+          "value": "{\"note\":\"_$$ND_FUNC$$_\"}",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "deserialization",
+        "rule": "deser.node_serialize"
+      }
+    },
+    {
+      "name": "Request data reaches Java deserialization",
+      "check": "deser",
+      "format": "java",
+      "data": "Description only: request-controlled Java serialization data passed to ObjectInputStream.readObject.",
+      "inputs": [
+        {
+          "value": "Description only: request-controlled Java serialization data passed to ObjectInputStream.readObject.",
+          "key": "body",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "deserialization",
+        "rule": "deser.java"
+      }
+    },
+    {
+      "name": "Search results reflect a script element",
+      "check": "xss",
+      "inputs": [
+        {
+          "value": "<script>alert('rasp-test')</script>",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "xss",
+        "rule": "xss.reflected"
+      },
+      "contentType": "text/html; charset=utf-8",
+      "body": "<p>Search results for: <script>alert('rasp-test')</script></p>"
+    },
+    {
+      "name": "Search results reflect an event handler",
+      "check": "xss",
+      "inputs": [
+        {
+          "value": "<img src=\"missing-fixture.png\" onerror=\"alert('rasp-test')\">",
+          "key": "query.q",
+          "source": "request"
+        }
+      ],
+      "expect": {
+        "attack": "xss",
+        "rule": "xss.reflected"
+      },
+      "contentType": "text/html; charset=utf-8",
+      "body": "<p>Search results for: <img src=\"missing-fixture.png\" onerror=\"alert('rasp-test')\"></p>"
+    }
+  ]
+}

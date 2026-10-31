@@ -1,0 +1,653 @@
+{
+ "comment": "Template engine syntax table for code.template_injection (sdk/rasp/README.md, \"Template source\"). Every SDK embeds this table verbatim and a test compares it with this file. Order inside each list is significant: the first match wins.",
+ "version": 1,
+ "engines": {
+  "handlebars": {
+   "pairs": [
+    [
+     "{{{",
+     "}}}",
+     "quoted"
+    ],
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{{!--",
+     "--}}"
+    ],
+    [
+     "{{!",
+     "}}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "\\",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "ejs": {
+   "pairs": [
+    [
+     "<%",
+     "%>",
+     "first"
+    ]
+   ],
+   "literal": [
+    [
+     "<%#",
+     "%>"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "lodash": {
+   "pairs": [
+    [
+     "<%",
+     "%>",
+     "first"
+    ],
+    [
+     "${",
+     "}",
+     "first"
+    ]
+   ],
+   "literal": [
+    [
+     "<%#",
+     "%>"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "pug": {
+   "pairs": [
+    [
+     "#{",
+     "}",
+     "bracket"
+    ],
+    [
+     "!{",
+     "}",
+     "bracket"
+    ]
+   ],
+   "literal": [],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": true
+  },
+  "nunjucks": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% raw %}",
+     "{% endraw %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "jinja2": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% raw %}",
+     "{% endraw %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "minijinja": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% raw %}",
+     "{% endraw %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "tera": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% raw %}",
+     "{% endraw %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "twig": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% verbatim %}",
+     "{% endverbatim %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "pebble": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% verbatim %}",
+     "{% endverbatim %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "django": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "first"
+    ],
+    [
+     "{%",
+     "%}",
+     "first"
+    ]
+   ],
+   "literal": [
+    [
+     "{#",
+     "#}"
+    ],
+    [
+     "{% comment %}",
+     "{% endcomment %}"
+    ],
+    [
+     "{% verbatim %}",
+     "{% endverbatim %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "liquid": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ],
+    [
+     "{%",
+     "%}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{% comment %}",
+     "{% endcomment %}"
+    ],
+    [
+     "{% raw %}",
+     "{% endraw %}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "scriban": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{%{",
+     "}%}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "gotemplate": {
+   "pairs": [
+    [
+     "{{",
+     "}}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{{/*",
+     "*/"
+    ],
+    [
+     "{{- /*",
+     "*/"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "mako": {
+   "pairs": [
+    [
+     "${",
+     "}",
+     "bracket"
+    ],
+    [
+     "<%",
+     "%>",
+     "first"
+    ]
+   ],
+   "literal": [
+    [
+     "<%doc>",
+     "</%doc>"
+    ],
+    [
+     "<%text>",
+     "</%text>"
+    ]
+   ],
+   "tags": [
+    [
+     "<%",
+     ">"
+    ],
+    [
+     "</%",
+     ">"
+    ]
+   ],
+   "directives": [],
+   "lineComment": [
+    "##"
+   ],
+   "lineCode": [
+    "%"
+   ],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "freemarker": {
+   "pairs": [
+    [
+     "${",
+     "}",
+     "bracket"
+    ],
+    [
+     "#{",
+     "}",
+     "bracket"
+    ]
+   ],
+   "literal": [
+    [
+     "<#--",
+     "-->"
+    ],
+    [
+     "<#noparse>",
+     "</#noparse>"
+    ]
+   ],
+   "tags": [
+    [
+     "<#",
+     ">"
+    ],
+    [
+     "</#",
+     ">"
+    ],
+    [
+     "<@",
+     ">"
+    ],
+    [
+     "</@",
+     ">"
+    ]
+   ],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "velocity": {
+   "pairs": [
+    [
+     "$!{",
+     "}",
+     "bracket"
+    ],
+    [
+     "${",
+     "}",
+     "bracket"
+    ]
+   ],
+   "literal": [
+    [
+     "#*",
+     "*#"
+    ],
+    [
+     "##",
+     "\n"
+    ],
+    [
+     "#[[",
+     "]]#"
+    ]
+   ],
+   "tags": [],
+   "directives": [
+    "$!",
+    "$",
+    "#"
+   ],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "\\",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "thymeleaf": {
+   "pairs": [
+    [
+     "[[",
+     "]]",
+     "quoted"
+    ],
+    [
+     "[(",
+     ")]",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "<!--/*",
+     "*/-->"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [
+    "th:",
+    "data-th-"
+   ],
+   "escape": "",
+   "spaceLiteral": false,
+   "pug": false
+  },
+  "smarty": {
+   "pairs": [
+    [
+     "{",
+     "}",
+     "quoted"
+    ]
+   ],
+   "literal": [
+    [
+     "{*",
+     "*}"
+    ],
+    [
+     "{literal}",
+     "{/literal}"
+    ]
+   ],
+   "tags": [],
+   "directives": [],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "",
+   "spaceLiteral": true,
+   "pug": false
+  },
+  "blade": {
+   "pairs": [
+    [
+     "{!!",
+     "!!}",
+     "first"
+    ],
+    [
+     "{{",
+     "}}",
+     "first"
+    ],
+    [
+     "@php",
+     "@endphp",
+     "first"
+    ]
+   ],
+   "literal": [
+    [
+     "{{--",
+     "--}}"
+    ],
+    [
+     "@verbatim",
+     "@endverbatim"
+    ]
+   ],
+   "tags": [],
+   "directives": [
+    "@"
+   ],
+   "lineComment": [],
+   "lineCode": [],
+   "attrs": [],
+   "escape": "@",
+   "spaceLiteral": false,
+   "pug": false
+  }
+ }
+}

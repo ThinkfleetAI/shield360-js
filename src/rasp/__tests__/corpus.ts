@@ -4,7 +4,7 @@
  * `request` inputs go through the normaliser (percent-decoded forms added);
  * `model_output` inputs through the model-output fragmenter.
  */
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import {
   detectArgv,
@@ -29,7 +29,9 @@ import { addInput, addModelOutput, flatten } from '../normalize';
 import type { Finding, RaspInput } from '../types';
 import { BUILT_IN_RULES, matchVirtualPatches, type VirtualPatch, type VpRequest } from '../vpatch';
 
-export const RASP_DIR = join(__dirname, '..', '..', '..', '..', 'rasp');
+// sdk/rasp in the monorepo; rasp/ at the root of the public mirror (shield360-js).
+export const RASP_DIR = [join(__dirname, '..', '..', '..', '..', 'rasp'), join(__dirname, '..', '..', '..', 'rasp')]
+  .find((dir) => existsSync(join(dir, 'testdata'))) ?? join(__dirname, '..', '..', '..', '..', 'rasp');
 export const loadJson = (rel: string): any => JSON.parse(readFileSync(join(RASP_DIR, rel), 'utf8'));
 
 export const SECTIONS = ['sql', 'nosql', 'command', 'path', 'ssrf', 'code', 'template', 'xml', 'deser', 'xss', 'requests'] as const;
