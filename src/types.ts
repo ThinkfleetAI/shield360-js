@@ -164,6 +164,8 @@ export interface ResolvedOptions {
   tracer?: NodeTracerProvider;
   otlpEndpoint?: string;
   otlpHeaders?: Record<string, unknown>;
+  /** SHIELD: with no destination, print to the console (destination.ts consoleFallbackAllowed); otherwise send nothing. */
+  consoleFallback: boolean;
   disableBatch: boolean;
   captureMessageContent: boolean;
   disabledInstrumentors?: string[];

@@ -75,3 +75,22 @@ export function resolveDestination(input: DestinationInput): Destination {
   }
   return { otlpEndpoint: `${url}${INGEST_PATH}`, otlpHeaders: headers };
 }
+
+/**
+ * Whether telemetry with nowhere to go may be printed to the console instead
+ * (OpenTelemetry's development default). Not when a Shield360 URL or key was
+ * given, since that means "send it to Shield360": without both, nothing is
+ * sent and init() says why once. And not when stdout and stderr are captured
+ * as application logs, because every printed record would come back as a new
+ * log record (a loop seen in production, 2026-10-31).
+ */
+export function consoleFallbackAllowed(input: {
+  otlpEndpoint?: string;
+  shield360Url?: string;
+  shield360ApiKey?: string;
+  captureStdio?: boolean;
+}): boolean {
+  if (input.otlpEndpoint) return false;
+  if (input.shield360Url?.trim() || input.shield360ApiKey?.trim()) return false;
+  return !input.captureStdio;
+}

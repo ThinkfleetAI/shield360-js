@@ -98,7 +98,7 @@ export default class Tracing {
         const exporter = Tracing.createOTLPExporter(options);
         this.traceExporter = exporter;
         processors.push(Tracing.wrapProcessor(exporter, options.disableBatch));
-      } else {
+      } else if (options.consoleFallback) {
         processors.push(new SimpleSpanProcessor(new ConsoleSpanExporter()));
       }
     }

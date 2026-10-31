@@ -65,7 +65,7 @@ export default class Events {
     } else {
       if (options.otlpEndpoint) {
         processors.push(Events.createOTLPProcessor(options));
-      } else {
+      } else if (options.consoleFallback) {
         processors.push(new SimpleLogRecordProcessor({ exporter: new ConsoleLogRecordExporter() }));
       }
     }

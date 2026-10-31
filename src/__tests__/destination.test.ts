@@ -1,4 +1,4 @@
-import { INGEST_PATH, parseOtlpHeaders, resolveDestination } from '../destination';
+import { INGEST_PATH, consoleFallbackAllowed, parseOtlpHeaders, resolveDestination } from '../destination';
 
 /**
  * A Shield360 URL and API key are enough to send telemetry.
@@ -78,5 +78,24 @@ describe('parseOtlpHeaders', () => {
   it('ignores what is not a pair', () => {
     expect(parseOtlpHeaders('=nothing,justaname,,')).toEqual({});
     expect(parseOtlpHeaders(undefined)).toEqual({});
+  });
+});
+
+describe('consoleFallbackAllowed', () => {
+  it('prints to the console only when nothing at all was configured', () => {
+    expect(consoleFallbackAllowed({})).toBe(true);
+  });
+
+  it('never with half a Shield360 destination: nothing is sent instead', () => {
+    expect(consoleFallbackAllowed({ shield360Url: 'https://app.shield360.ai' })).toBe(false);
+    expect(consoleFallbackAllowed({ shield360ApiKey: 'k' })).toBe(false);
+  });
+
+  it('never while stdout and stderr are captured as logs, which would feed the output back in', () => {
+    expect(consoleFallbackAllowed({ captureStdio: true })).toBe(false);
+  });
+
+  it('is irrelevant with a destination', () => {
+    expect(consoleFallbackAllowed({ otlpEndpoint: 'http://collector:4318' })).toBe(false);
   });
 });

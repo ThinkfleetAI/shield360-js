@@ -254,7 +254,7 @@ export default class Metrics {
     } else {
       if (options.otlpEndpoint) {
         readers.push(Metrics.createOTLPReader(options));
-      } else {
+      } else if (options.consoleFallback) {
         readers.push(Metrics.createConsoleReader(options));
       }
     }

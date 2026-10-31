@@ -41,7 +41,7 @@ import { TopicRestriction } from './guard/topic-restriction';
 import { Schema } from './guard/schema';
 import { Custom } from './guard/custom';
 import { Pipeline } from './guard/pipeline';
-import { parseOtlpHeaders, resolveDestination } from './destination';
+import { consoleFallbackAllowed, parseOtlpHeaders, resolveDestination } from './destination';
 // Budget check: app budgets enforced through the SDK.
 import { budgets, configureBudgets, BudgetClient, BudgetExceededError } from './budgets';
 import { setupAutoBudgetCheck } from './budgets/auto';
@@ -147,6 +147,12 @@ function resolveOptions(options?: Shield360Options): ResolvedOptions {
     tracer: o.tracer,
     otlpEndpoint,
     otlpHeaders,
+    consoleFallback: consoleFallbackAllowed({
+      otlpEndpoint,
+      shield360Url,
+      shield360ApiKey,
+      captureStdio: resolveCaptureLogs(o.captureLogs) && (o.captureStdio ?? parseBoolEnv('SHIELD360_CAPTURE_STDIO') ?? false),
+    }),
     disableBatch,
     captureMessageContent,
     disabledInstrumentors: o.disabledInstrumentors,
@@ -275,6 +281,12 @@ class Shield360 extends BaseShield360 {
 
       const resolved = resolveOptions(options);
       this.options = resolved;
+      // SHIELD: half a Shield360 destination sends nothing; say so once rather than print every record.
+      if (!resolved.otlpEndpoint && Boolean(resolved.shield360Url?.trim()) !== Boolean(resolved.shield360ApiKey?.trim())) {
+        console.warn(
+          `Shield360: ${resolved.shield360Url?.trim() ? 'SHIELD360_API_KEY' : 'SHIELD360_URL'} is not set, so telemetry and application logs are not sent.`
+        );
+      }
 
       const buildAttributes = resolveBuildAttributes({ serviceVersion: resolved.serviceVersion });
       // User feedback names the application and release it was given for.

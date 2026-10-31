@@ -8,7 +8,7 @@
  * Runs against the built package (`dist/`), as `npm test` does in CI after
  * `npm run build`; it builds incrementally first.
  */
-import { execFileSync, spawn, type ChildProcess } from 'child_process';
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'child_process';
 import { generateKeyPairSync } from 'crypto';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { createServer, get, type Server } from 'http';
@@ -265,6 +265,22 @@ describe('zero-code entry (shield360/register), end to end', () => {
     } finally {
       stop(app);
     }
+  });
+
+  it('a Shield360 URL without a key prints nothing but the app, even with stdout captured as logs', () => {
+    // SKUFlow, 2026-10-31: no key, so every signal fell back to the console, and stdout capture fed each
+    // printed record back in as a new log record (hundreds of lines a second from an idle app).
+    writeFileSync(join(dir, 'logger.js'), `
+      process.stdout.write(JSON.stringify({ level: 'info', msg: 'started' }) + '\\n');
+      setTimeout(() => process.exit(0), 1500);
+    `);
+    const env: NodeJS.ProcessEnv = { ...baseEnv, SHIELD360_URL: fake.url, SHIELD360_CAPTURE_LOGS: 'true', SHIELD360_CAPTURE_STDIO: 'true', SHIELD360_RASP: 'off', OTEL_EXPORTER_OTLP_METRICS_EXPORT_INTERVAL: '200' };
+    delete env.SHIELD360_API_KEY;
+    delete env.OTEL_EXPORTER_OTLP_ENDPOINT;
+    const run = spawnSync(process.execPath, ['--require', REGISTER, join(dir, 'logger.js')], { env, encoding: 'utf8', timeout: 30_000 });
+    expect(run.stdout.trim()).toBe('{"level":"info","msg":"started"}');
+    expect(run.stderr).not.toContain('telemetry.sdk.name');
+    expect(run.stderr.match(/SHIELD360_API_KEY is not set/g)).toHaveLength(1);
   });
 
   it('with RASP off the app runs unchanged', async () => {
