@@ -39,6 +39,7 @@ import ElevenLabsInstrumentation from './elevenlabs';
 import AssemblyAIInstrumentation from './assemblyai';
 import TransformersInstrumentation from './transformers';
 import PgInstrumentation from './pg';
+import { communityOptions } from './http-noise';
 import FirecrawlInstrumentation from './firecrawl';
 import LettaInstrumentation from './letta';
 
@@ -52,6 +53,7 @@ import LettaInstrumentation from './letta';
  *   Python: requests, urllib, urllib3  → Node: http  (@opentelemetry/instrumentation-http)
  *   Python: httpx, aiohttp-client     → Node: undici (@opentelemetry/instrumentation-undici)
  *   Python: django, flask, fastapi…   → Node: express, fastify, koa, hapi, nestjs-core
+ *   Data stores, messaging, cloud     → Node: redis, ioredis, mysql2, mysql, mongodb, graphql, grpc, kafkajs, aws-sdk
  */
 const OTEL_COMMUNITY_INSTRUMENTATIONS: Record<string, { pkg: string; cls: string }> = {
   // HTTP client instrumentations
@@ -63,6 +65,16 @@ const OTEL_COMMUNITY_INSTRUMENTATIONS: Record<string, { pkg: string; cls: string
   'koa':          { pkg: '@opentelemetry/instrumentation-koa',          cls: 'KoaInstrumentation' },
   'hapi':         { pkg: '@opentelemetry/instrumentation-hapi',         cls: 'HapiInstrumentation' },
   'nestjs-core':  { pkg: '@opentelemetry/instrumentation-nestjs-core',  cls: 'NestInstrumentation' },
+  // SHIELD: data stores, messaging and cloud — an app's requests show what they wait on.
+  'redis':        { pkg: '@opentelemetry/instrumentation-redis',        cls: 'RedisInstrumentation' },
+  'ioredis':      { pkg: '@opentelemetry/instrumentation-ioredis',      cls: 'IORedisInstrumentation' },
+  'mysql2':       { pkg: '@opentelemetry/instrumentation-mysql2',       cls: 'MySQL2Instrumentation' },
+  'mysql':        { pkg: '@opentelemetry/instrumentation-mysql',        cls: 'MySQLInstrumentation' },
+  'mongodb':      { pkg: '@opentelemetry/instrumentation-mongodb',      cls: 'MongoDBInstrumentation' },
+  'graphql':      { pkg: '@opentelemetry/instrumentation-graphql',      cls: 'GraphQLInstrumentation' },
+  'grpc':         { pkg: '@opentelemetry/instrumentation-grpc',         cls: 'GrpcInstrumentation' },
+  'kafkajs':      { pkg: '@opentelemetry/instrumentation-kafkajs',      cls: 'KafkaJsInstrumentation' },
+  'aws-sdk':      { pkg: '@opentelemetry/instrumentation-aws-sdk',      cls: 'AwsInstrumentation' },
 };
 
 function loadOtelCommunityInstrumentations(disabledInstrumentors: string[]): any[] {
@@ -74,7 +86,8 @@ function loadOtelCommunityInstrumentations(disabledInstrumentors: string[]): any
       const mod = require(pkg);
       const InstrClass = mod[cls];
       if (InstrClass) {
-        instances.push(new InstrClass());
+        // SHIELD: http and undici leave out health probes and the SDK's own calls (http-noise.ts).
+        instances.push(new InstrClass(communityOptions(name)));
       }
     } catch {
       // Package not installed — skip silently (same as Python SDK)

@@ -130,3 +130,33 @@ describe('guard heartbeat', () => {
     await resetGuardReports();
   });
 });
+
+// SHIELD: Connect an app — a refused key says why, once per reason.
+describe('postGuardEvents refusals', () => {
+  const { postGuardEvents, resetRefusalWarnings } = jest.requireActual('../report') as typeof import('../report');
+  const refuse = (status: number, err?: string) =>
+    jest.fn(async () => ({ ok: false, status, json: async () => (err ? { err } : {}) }) as unknown as Response);
+
+  beforeEach(() => resetRefusalWarnings());
+
+  it("prints the server's reason once, not on every batch", async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    const fetchImpl = refuse(401, 'This is an install key (s360i_), which enrolls collectors.');
+    for (let i = 0; i < 3; i++) {
+      expect(await postGuardEvents('http://x/api/guard/events', 'k', { resource: {}, events: [{}] }, { fetchImpl, label: 'RASP event' })).toBe(false);
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0][0]).toBe('Shield360 rejected RASP events: HTTP 401 (This is an install key (s360i_), which enrolls collectors.)');
+    // A different reason is new information.
+    await postGuardEvents('http://x/api/guard/events', 'k', { resource: {}, events: [{}] }, { fetchImpl: refuse(401, 'This API key was revoked.'), label: 'RASP event' });
+    expect(warn).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it('still says the status when the server gave no reason', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await postGuardEvents('http://x/api/guard/events', 'k', { resource: {}, events: [{}] }, { fetchImpl: refuse(403), label: 'guard report' });
+    expect(warn.mock.calls[0][0]).toBe('Shield360 rejected guard reports: HTTP 403');
+    warn.mockRestore();
+  });
+});

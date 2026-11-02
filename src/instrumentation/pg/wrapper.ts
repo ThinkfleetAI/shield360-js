@@ -385,10 +385,9 @@ class PgWrapper extends BaseWrapper {
         const tableName = PgWrapper.extractTableName(queryText);
         const batchSize = PgWrapper.resolveBatchSize(values);
         const connInfo = PgWrapper.extractConnectionInfo(this);
-        const spanName =
-          typeof batchSize === 'number' && batchSize > 0
-            ? `${dbOperation} ${tableName} (batch)`
-            : `${dbOperation} ${tableName}`;
+        // SHIELD: a statement with no table (COMMIT, SELECT 1) is named by its verb alone, not "COMMIT unknown".
+        const target = tableName && tableName !== 'unknown' ? `${dbOperation} ${tableName}` : dbOperation;
+        const spanName = typeof batchSize === 'number' && batchSize > 0 ? `${target} (batch)` : target;
         const span = tracer.startSpan(spanName, { kind: SpanKind.CLIENT });
         const startTime = Date.now();
 

@@ -40,6 +40,18 @@ The API key decides which project environment the app reports to. See [Pin the c
 
     The runtime protection hooks are installed before your app loads, and every `http` and `https` request is captured without middleware. ES module imports are instrumented too. Set `SHIELD360_ESM_HOOK=off` to leave the ES module hook out.
 
+    Each incoming request becomes a trace, named by its route when the app uses Express, Koa, Hapi or NestJS (`GET /orders/:id`). What the request waits on appears inside it, with nothing to install beyond `shield360`:
+
+    | Kind | Libraries |
+    |---|---|
+    | Outgoing HTTP | `http`, `https`, `fetch` (undici) |
+    | Databases | PostgreSQL (`pg`), MySQL (`mysql2`, `mysql`), MongoDB |
+    | Caches | Redis (`redis`, `ioredis`) |
+    | APIs and messaging | GraphQL, gRPC, Kafka (`kafkajs`), the AWS SDK |
+    | AI | Every provider and framework in the [integrations](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/overview.mdx) list |
+
+    Values stay out of what is recorded: a Redis command is stored by name only (`GET`, not its key or value), GraphQL field values and MongoDB query values are left out, and SQL is recorded without parameters. Health probes (Kubernetes, load balancers, uptime checks, `/healthz`-style paths) and the SDK's own calls to Shield360 are not traced. Turn one off with `SHIELD360_DISABLED_INSTRUMENTORS`, for example `SHIELD360_DISABLED_INSTRUMENTORS=graphql,kafkajs`.
+
     `SHIELD360_GUARDS` turns guards on for the app's LLM calls: guard kinds (`prompt_injection`, `pii`, `moderation`), each with an action after a colon (`allow`, `warn`, `redact`, or `block`). The guards also send the heartbeat the [Secured by Shield360 badge](https://shield360.ai) reads. A bundled app must keep its LLM client (`@anthropic-ai/sdk`, `openai`) outside the bundle, installed beside it.
   </Tab>
   <Tab title="Python">

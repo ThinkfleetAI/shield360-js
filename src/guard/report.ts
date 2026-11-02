@@ -96,6 +96,32 @@ class Reporter {
   }
 }
 
+// SHIELD: Connect an app — a refusal says why (the server's `err`, e.g. "This is an install key..."),
+// once per reason per process rather than on every batch.
+const warnedRefusals = new Set<string>();
+
+/** The server's own reason for a refusal, cut short; empty when it gave none. */
+async function refusalReason(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { err?: unknown };
+    return typeof body?.err === 'string' ? body.err.slice(0, 300) : '';
+  } catch {
+    return '';
+  }
+}
+
+function warnRefusal(label: string, status: number, reason: string): void {
+  const key = `${status}:${reason}`;
+  if (warnedRefusals.has(key)) return;
+  warnedRefusals.add(key);
+  console.warn(`Shield360 rejected ${label}s: HTTP ${status}${reason ? ` (${reason})` : ''}`);
+}
+
+/** For tests: forget which refusals were already reported. */
+export function resetRefusalWarnings(): void {
+  warnedRefusals.clear();
+}
+
 export type GuardEventsTransportOptions = {
   /** What the batch is, for the warning when it cannot be delivered. */
   label?: string;
@@ -136,7 +162,7 @@ export async function postGuardEvents(
       });
       if (res.ok) return true;
       if ([400, 401, 403, 413].includes(res.status)) {
-        console.warn(`Shield360 rejected ${label}s: HTTP ${res.status}`);
+        warnRefusal(label, res.status, await refusalReason(res));
         return false;
       }
     } catch {

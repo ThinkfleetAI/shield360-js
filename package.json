@@ -1,6 +1,6 @@
 {
   "name": "shield360",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "homepage": "https://github.com/ThinkfleetAI/shield360-js#readme",
   "bugs": {
     "url": "https://github.com/ThinkfleetAI/shield360-js/issues",
@@ -98,6 +98,21 @@
     "@opentelemetry/exporter-metrics-otlp-http": "^0.222.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.222.0",
     "@opentelemetry/instrumentation": "^0.203.0",
+    "@opentelemetry/instrumentation-aws-sdk": "^0.77.0",
+    "@opentelemetry/instrumentation-express": "^0.70.0",
+    "@opentelemetry/instrumentation-graphql": "^0.70.0",
+    "@opentelemetry/instrumentation-grpc": "^0.222.0",
+    "@opentelemetry/instrumentation-hapi": "^0.68.0",
+    "@opentelemetry/instrumentation-http": "^0.222.0",
+    "@opentelemetry/instrumentation-ioredis": "^0.70.0",
+    "@opentelemetry/instrumentation-kafkajs": "^0.31.0",
+    "@opentelemetry/instrumentation-koa": "^0.70.0",
+    "@opentelemetry/instrumentation-mongodb": "^0.75.0",
+    "@opentelemetry/instrumentation-mysql": "^0.68.0",
+    "@opentelemetry/instrumentation-mysql2": "^0.68.0",
+    "@opentelemetry/instrumentation-nestjs-core": "^0.68.0",
+    "@opentelemetry/instrumentation-redis": "^0.70.0",
+    "@opentelemetry/instrumentation-undici": "^0.32.0",
     "@opentelemetry/resources": "^2.11.0",
     "@opentelemetry/sdk-logs": "^0.222.0",
     "@opentelemetry/sdk-metrics": "^2.11.0",
@@ -118,34 +133,10 @@
     "uuid": "11.1.1"
   },
   "peerDependencies": {
-    "@opentelemetry/instrumentation-express": ">=0.40.0",
-    "@opentelemetry/instrumentation-fastify": ">=0.38.0",
-    "@opentelemetry/instrumentation-hapi": ">=0.40.0",
-    "@opentelemetry/instrumentation-http": ">=0.50.0",
-    "@opentelemetry/instrumentation-koa": ">=0.42.0",
-    "@opentelemetry/instrumentation-nestjs-core": ">=0.39.0",
-    "@opentelemetry/instrumentation-undici": ">=0.1.0"
+    "@opentelemetry/instrumentation-fastify": ">=0.38.0"
   },
   "peerDependenciesMeta": {
-    "@opentelemetry/instrumentation-http": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-undici": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-express": {
-      "optional": true
-    },
     "@opentelemetry/instrumentation-fastify": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-koa": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-hapi": {
-      "optional": true
-    },
-    "@opentelemetry/instrumentation-nestjs-core": {
       "optional": true
     }
   }
