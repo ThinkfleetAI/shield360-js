@@ -1,0 +1,30 @@
+---
+title: 'Java SDK Overview'
+sidebarTitle: 'Java SDK Overview'
+icon: 'java'
+description: 'OpenTelemetry set-up and runtime protection for Java 17+ apps, with a servlet filter and a -javaagent that adds protection with no code change.'
+---
+
+The Shield360 Java SDK sets up OpenTelemetry for your app and adds runtime application self-protection (RASP). It has two artifacts:
+
+- **`shield360-sdk`**: telemetry set-up, the RASP core and detectors, a servlet filter, and `Shield360Rasp.check*` helpers you can call yourself.
+- **`shield360-agent`**: a `-javaagent` that installs the RASP hooks automatically, with no code change.
+
+It needs Java 17 or later. The servlet API (`jakarta.servlet` 5.0 or later) is supplied by your container.
+
+## Install
+
+<Warning>
+The Java SDK is not published to Maven Central yet. To get access, [contact us](https://shield360.ai/demo).
+</Warning>
+
+## What it covers
+
+| Feature | Available |
+|---|---|
+| Traces and metrics over OTLP | Yes |
+| Runtime protection, custom rules and passive IAST | Yes |
+| Application logs (Logback, Log4j 2) | Yes |
+| Feature flags | Yes |
+
+To start any Java app with Shield360 and no code change, see [`shield360 run`](https://shield360.ai).

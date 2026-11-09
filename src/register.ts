@@ -64,6 +64,17 @@ function inModuleHooksThread(): boolean {
   return (require('worker_threads') as { isInternalThread?: boolean }).isInternalThread === true;
 }
 
+/**
+ * An app's own worker thread (a hashing or image pool, Piscina, a Worker): Node runs NODE_OPTIONS'
+ * `--require` preloads in each one, so each started a second Shield360 with its own exporters,
+ * heartbeat and stdout capture, and the process reported as several instances (Base316's API,
+ * 2026-11-02). Telemetry starts in the main thread only.
+ */
+function inWorkerThread(): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return !(require('worker_threads') as typeof import('worker_threads')).isMainThread;
+}
+
 /** The OpenTelemetry ESM loader hook (import-in-the-middle), so instrumentations see `import`ed packages. */
 function registerEsmHook(): void {
   if (isOff(process.env.SHIELD360_ESM_HOOK)) return;
@@ -79,7 +90,7 @@ function registerEsmHook(): void {
 }
 
 function initFromEnv() {
-  if (inModuleHooksThread()) return;
+  if (inModuleHooksThread() || inWorkerThread()) return;
   if ((globalThis as any)[GLOBAL_SENTINEL]) return;
   (globalThis as any)[GLOBAL_SENTINEL] = true;
 

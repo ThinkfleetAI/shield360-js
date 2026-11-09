@@ -10,8 +10,10 @@ import {
   CodeLocationSpanProcessor,
   PathNormaliser,
   anonymiseAbsolutePath,
+  resolveCaptureCallLocation,
   resolveCaptureCodeLocation,
 } from '../otel/code-location';
+import { SpanKind } from '@opentelemetry/api';
 
 const GEN_AI = { 'gen_ai.operation.name': 'chat' };
 /** This file as the processor reports it: relative to the repository root, which is the monorepo here and the SDK's own root in its public mirror. */
@@ -62,7 +64,57 @@ describe('CodeLocationSpanProcessor', () => {
     expect(attrs[ATTR_CODE_LINE_NUMBER]).toBe(line);
   });
 
-  it('leaves non-GenAI spans alone', () => {
+  function startCall(kind: SpanKind, attributes: Record<string, string | number>, on: CodeLocationSpanProcessor = processor) {
+    const local = new InMemorySpanExporter();
+    const p = new NodeTracerProvider({ spanProcessors: [on, new SimpleSpanProcessor(local)] });
+    const [span, line] = [p.getTracer('test').startSpan('call', { kind, attributes }), callerLine()];
+    span.end();
+    return { attrs: local.getFinishedSpans()[0].attributes, line };
+  }
+
+  // SHIELD: code cost — outbound calls carry their call site, so a costly
+  // pattern shield360 scan found can be priced by what that call cost.
+  it('adds the call site to database, HTTP, RPC and messaging client spans', () => {
+    for (const [kind, attributes] of [
+      [SpanKind.CLIENT, { 'db.system': 'postgresql' }],
+      [SpanKind.CLIENT, { 'db.system.name': 'mongodb' }],
+      [SpanKind.CLIENT, { 'http.request.method': 'GET' }],
+      [SpanKind.CLIENT, { 'rpc.system': 'aws-api' }],
+      [SpanKind.PRODUCER, { 'messaging.system': 'aws_sqs' }],
+    ] as const) {
+      const { attrs, line } = startCall(kind, attributes);
+      expect(attrs[ATTR_CODE_FILE_PATH]).toBe(THIS_FILE);
+      expect(attrs[ATTR_CODE_LINE_NUMBER]).toBe(line);
+    }
+  });
+
+  it('leaves server and internal spans, and plain client spans, alone', () => {
+    expect(startCall(SpanKind.SERVER, { 'http.request.method': 'GET' }).attrs[ATTR_CODE_FILE_PATH]).toBeUndefined();
+    expect(startCall(SpanKind.INTERNAL, { 'db.system': 'postgresql' }).attrs[ATTR_CODE_FILE_PATH]).toBeUndefined();
+    expect(startCall(SpanKind.CLIENT, { 'peer.service': 'x' }).attrs[ATTR_CODE_FILE_PATH]).toBeUndefined();
+  });
+
+  it('stamps only GenAI spans when calls are switched off', () => {
+    const off = new CodeLocationSpanProcessor({ calls: false });
+    expect(startCall(SpanKind.CLIENT, { 'db.system': 'postgresql' }, off).attrs[ATTR_CODE_FILE_PATH]).toBeUndefined();
+    expect(startCall(SpanKind.CLIENT, GEN_AI, off).attrs[ATTR_CODE_FILE_PATH]).toBe(THIS_FILE);
+  });
+
+  it('reads SHIELD360_CAPTURE_CALL_LOCATION, with the option winning', () => {
+    const before = process.env.SHIELD360_CAPTURE_CALL_LOCATION;
+    try {
+      process.env.SHIELD360_CAPTURE_CALL_LOCATION = 'false';
+      expect(resolveCaptureCallLocation()).toBe(false);
+      expect(resolveCaptureCallLocation(true)).toBe(true);
+      delete process.env.SHIELD360_CAPTURE_CALL_LOCATION;
+      expect(resolveCaptureCallLocation()).toBe(true);
+    } finally {
+      if (before === undefined) delete process.env.SHIELD360_CAPTURE_CALL_LOCATION;
+      else process.env.SHIELD360_CAPTURE_CALL_LOCATION = before;
+    }
+  });
+
+  it('leaves non-GenAI internal spans alone', () => {
     const { attrs } = startChat({ 'db.system': 'postgresql' });
     expect(attrs[ATTR_CODE_FILE_PATH]).toBeUndefined();
     expect(attrs[ATTR_CODE_FUNCTION_NAME]).toBeUndefined();

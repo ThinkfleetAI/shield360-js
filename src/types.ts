@@ -153,6 +153,13 @@ export type Shield360Options = {
    * SHIELD360_RASP=monitor|block|off. See sdk/rasp/README.md.
    */
   rasp?: boolean | RaspOptions;
+  /**
+   * SHIELD: runtime SCA — report the names and versions of the packages this
+   * process loads (never paths) so Shield360 can match them against
+   * vulnerability data. On by default with a Shield360 URL and API key;
+   * `false` or env SHIELD360_RUNTIME_PACKAGES=off turns it off.
+   */
+  runtimePackages?: boolean;
 };
 
 /**

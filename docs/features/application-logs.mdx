@@ -3,7 +3,7 @@ title: "Application logs"
 description: "Send your application's own logs to Shield360 alongside its traces, linked by trace and span IDs. Off until you turn it on."
 ---
 
-The Shield360 SDKs can send your application's own log records to Shield360, not only the telemetry from instrumented AI calls. The logs go to the same place as your traces, with the same API key, and appear under **Telemetry > Logs**.
+The Shield360 SDKs can send your application's own log records to Shield360, not only the telemetry from instrumented AI calls. The logs go to the same place as your traces, with the same API key, and appear under **Logs**.
 
 Application logs are **off by default**. The SDK sends no log records until you turn them on, because logs often hold data you may not want to leave the process.
 
@@ -161,7 +161,7 @@ For zap, use `go.opentelemetry.io/contrib/bridges/otelzap` the same way. Pass th
 
 ## Without code changes: the OpenTelemetry Collector
 
-To send stdout/stderr, log files or the systemd journal without touching the app, run the OpenTelemetry Collector with the `filelog` receiver (JSON parsing, multi-line stack traces, container logs) or the `journald` receiver, and the `resource` processor setting `service.name`. Ready-to-use configs for a server, Docker, systemd and Kubernetes are in [`examples/app-monitoring`](https://github.com/ThinkfleetAI/Shield360/tree/main/examples/app-monitoring); see [Infrastructure](https://shield360.ai).
+To send stdout/stderr, log files or the systemd journal without touching the app, run the OpenTelemetry Collector with the `filelog` receiver (JSON parsing, multi-line stack traces, container logs) or the `journald` receiver, and the `resource` processor setting `service.name`. Ready-to-use configs for a server, Docker, systemd and Kubernetes are on the [Infrastructure](https://shield360.ai) page.
 
 ## Settings
 
@@ -176,7 +176,7 @@ If no destination is configured (no `SHIELD360_URL` and `SHIELD360_API_KEY`, and
 
 ## Find your logs
 
-Open **Telemetry > Logs** in Shield360. Each entry shows the time, severity, service, body, and trace and span IDs. Select an entry to see its attributes and follow the link to its trace. For more, see [Logs](https://shield360.ai).
+Open **Logs** in Shield360. Each entry shows the time, severity, service, body, and trace and span IDs. Select an entry to see its attributes and follow the link to its trace. For more, see [Logs](https://shield360.ai).
 
 ---
 

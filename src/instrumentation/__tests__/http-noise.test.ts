@@ -1,4 +1,4 @@
-import { communityOptions, isHealthProbe, isOwnCall, shield360Host } from '../http-noise';
+import { communityOptions, isHealthProbe, isOwnCall, maskKafkaKey, shield360Host } from '../http-noise';
 
 describe('request tracing noise', () => {
   it('treats probes and health paths as health checks', () => {
@@ -56,5 +56,33 @@ describe('data store options', () => {
     expect(communityOptions('mongodb')).toEqual({ enhancedDatabaseReporting: false });
     expect(communityOptions('aws-sdk')).toEqual({ suppressInternalInstrumentation: true });
     expect(communityOptions('express')).toEqual({ ignoreLayersType: ['middleware'] });
+  });
+
+  it('masks values out of mysql statements', () => {
+    expect(communityOptions('mysql2')).toEqual({ maskStatement: true });
+    expect(communityOptions('mysql')).toEqual({ enhancedDatabaseReporting: false });
+    // The instrumentation's own statement builder, with the option set: values never reach the text.
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { getQueryText } = require('@opentelemetry/instrumentation-mysql2/build/src/utils');
+    const format = (sql: string, values: unknown[]) => sql.replace(/\?/g, () => `'${values.shift()}'`);
+    expect(getQueryText('SELECT * FROM users WHERE email = ?', format, ['ada@example.com'], true))
+      .toBe('SELECT * FROM users WHERE email = ?');
+    expect(getQueryText("UPDATE t SET n = 42 WHERE name = 'Ada'", format, undefined, true))
+      .toBe('UPDATE t SET n = ? WHERE name = ?');
+    expect(getQueryText('SELECT * FROM users WHERE email = ?', format, ['ada@example.com'], false))
+      .toContain('ada@example.com');
+  });
+
+  it('records a Kafka message key as ? and never the payload', () => {
+    const kafka = communityOptions('kafkajs') as any;
+    expect(kafka.producerHook).toBe(maskKafkaKey);
+    expect(kafka.consumerHook).toBe(maskKafkaKey);
+    const set: Record<string, string> = {};
+    const span = { setAttribute: (k: string, v: string) => { set[k] = v; } };
+    maskKafkaKey(span, { topic: 'orders', message: { key: 'ada@example.com', value: 'secret' } } as any);
+    expect(set).toEqual({ 'messaging.kafka.message.key': '?' });
+    const none: Record<string, string> = {};
+    maskKafkaKey({ setAttribute: (k: string, v: string) => { none[k] = v; } }, { message: { value: 'x' } } as any);
+    expect(none).toEqual({});
   });
 });

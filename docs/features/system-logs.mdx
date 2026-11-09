@@ -3,7 +3,7 @@ title: "System logs"
 description: "Send logs that do not come from an SDK, such as Kubernetes containers, cluster events, the systemd journal, the Windows Event Log, Nginx and database log files, and syslog, to Shield360. Off until you turn it on."
 ---
 
-Shield360 can collect logs that no SDK writes: container output on Kubernetes nodes, Kubernetes events, the systemd journal, the Windows Event Log, log files such as Nginx or PostgreSQL logs, and syslog. These logs appear under **Telemetry > Logs** next to your application logs, and you can narrow the list with the **Source** filter.
+Shield360 can collect logs that no SDK writes: container output on Kubernetes nodes, Kubernetes events, the systemd journal, the Windows Event Log, log files such as Nginx or PostgreSQL logs, and syslog. These logs appear under **Logs** next to your application logs, and you can narrow the list with the **Source** filter.
 
 System logs are **off by default**. Nothing is read from a node or server until you turn on an agent, and the agent reads only the sources you choose.
 
@@ -39,21 +39,20 @@ Logs from the SDKs have no `log.source` and are shown as **Application**.
 
 The operator's Helm chart includes a DaemonSet and a single-replica Deployment. The DaemonSet reads container output and the node journal on every node. The Deployment collects cluster events once for the whole cluster.
 
-1. Build the agent image from `src/otel-collector/Dockerfile.agent`, or run **CI / Operator** manually and use its `system-logs-agent` image. Push the image to your registry.
-2. Store the project's API key in a Secret in the release namespace:
+The agent image, `ghcr.io/thinkfleetai/shield360-system-logs-agent`, is published with the chart and is its default.
+
+1. Store the project's API key in a Secret in the release namespace:
 
    ```bash
    kubectl -n shield360-system create secret generic shield360-api-key --from-literal=api-key=<project API key>
    ```
 
-3. Turn on system logs:
+2. Turn on system logs:
 
    ```bash
-   helm upgrade --install shield360-operator deploy/operator/chart/shield360-operator \
-     -n shield360-system \
-     --set image.repository=<operator image> \
+   helm upgrade --install shield360-operator oci://ghcr.io/thinkfleetai/charts/shield360-operator \
+     --version 0.3.0 -n shield360-system \
      --set systemLogs.enabled=true \
-     --set systemLogs.image.repository=<agent image> --set systemLogs.image.tag=<tag> \
      --set systemLogs.url=https://app.shield360.ai \
      --set systemLogs.apiKeySecret.name=shield360-api-key \
      --set systemLogs.clusterName=prod
@@ -61,20 +60,24 @@ The operator's Helm chart includes a DaemonSet and a single-replica Deployment. 
 
 | Value | Default | What it does |
 | --- | --- | --- |
+| `systemLogs.image.repository`, `systemLogs.image.tag` | the published agent, at the chart's version | Your own agent image, for example from a mirror registry |
 | `systemLogs.node.namespaces` | `[]` (all) | Reads containers in these namespaces only |
 | `systemLogs.node.excludeNamespaces` | `[]` | Skips containers in these namespaces |
 | `systemLogs.node.journald` | `true` | Reads the node journal (kubelet, container runtime, kernel) |
 | `systemLogs.node.journalDirectory` | `/var/log/journal` | Set to `/run/log/journal` on nodes that keep the journal in memory |
 | `systemLogs.node.kubeletStats` | `false` | Sends pod and node CPU and memory use from the kubelet |
 | `systemLogs.node.dockerContainersPath` | `""` | On Docker nodes, set to `/var/lib/docker/containers` |
+| `systemLogs.node.tetragon.enabled` | `false` | Reads [Tetragon](https://shield360.ai) runtime security events from the node |
+| `systemLogs.node.tetragon.exportDirectory` | `/var/run/cilium/tetragon` | Where Tetragon writes `tetragon.log` |
 | `systemLogs.clusterEvents.enabled` | `true` | Collects cluster events |
+| `systemLogs.clusterEvents.resourceRequests` | `false` | Sends pod CPU and memory requests and limits and node capacity, for [Costs → Compute](https://shield360.ai). Pair it with `kubeletStats` |
 
 The agents have minimal permissions:
 
 - The node agent can get, list, and watch pods, namespaces, and ReplicaSets. It also gets `nodes/stats` when `kubeletStats` is on.
-- The events agent can get, list, and watch events.
+- The events agent can get, list, and watch events. With `resourceRequests` on, it can also get, list, and watch the objects the `k8s_cluster` receiver follows: namespaces, nodes, pods, services, resource quotas, replication controllers, the `apps` workloads, jobs, cron jobs and horizontal pod autoscalers.
 - Neither agent can read Secrets. The API key reaches them through a `secretKeyRef`.
-- The node agent mounts `/var/log` read-only. Its only writable host path is `/var/lib/shield360-otelcol`, where it stores file offsets and journal cursors. It runs as root so it can read root-owned log files, but it drops every capability and uses a read-only root file system.
+- The node agent mounts `/var/log` read-only, and Tetragon's export directory read-only when `tetragon.enabled` is on. Its only writable host path is `/var/lib/shield360-otelcol`, where it stores file offsets and journal cursors. It runs as root so it can read root-owned log files, but it drops every capability and uses a read-only root file system.
 - The events agent runs as a non-root user and mounts no host paths.
 
 ## Linux and Windows servers

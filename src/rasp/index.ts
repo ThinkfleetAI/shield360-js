@@ -41,6 +41,7 @@ import { installProcessHooks, uninstallProcessHooks } from './hooks/process';
 import { BUILT_IN_SINKS, installSinkHooks, parseSinkRules, setSinkRules, uninstallSinkHooks } from './hooks/sinks';
 import { configureIast, setIastRemote, setIastSink } from './iast';
 import { collectComponents, RaspReporter } from './reporter';
+import { runtimePackagesActive } from '../runtime-packages';
 import type { RaspOptions } from './types';
 
 const COMPONENTS_EVERY_MS = 24 * 60 * 60 * 1000;
@@ -195,7 +196,8 @@ export function initRasp(option: boolean | RaspOptions | undefined, ctx: RaspIni
       setEventSink(reporter);
       setIastSink(reporter);
       runtime.reporter = reporter;
-      if (o.components !== false) {
+      // SHIELD: runtime SCA — when the runtime package report runs it already sends these.
+      if (o.components !== false && !runtimePackagesActive()) {
         const report = () => {
           try {
             reporter?.reportComponents(collectComponents());

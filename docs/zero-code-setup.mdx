@@ -30,6 +30,20 @@ The API key decides which project environment the app reports to. See [Pin the c
 
 ## Start the app
 
+The quickest way, with the [Shield360 CLI](https://shield360.ai) on your machine: put `shield360 run --` in front of the command you already use. Nothing is installed in the app and no file changes.
+
+```bash
+shield360 run -- npm start
+shield360 run --app checkout --env staging -- node server.js
+shield360 run -- uvicorn main:app --reload
+```
+
+It reads the Shield360 address and key from `SHIELD360_URL` and `SHIELD360_API_KEY` (or `shield360 configure`). The app is named after its `package.json` or `pyproject.toml`, else its directory (`--app` to choose), and its data goes to the `dev` environment unless `--env` or `SHIELD360_ENVIRONMENT` says otherwise. Application logs are captured. For Node, the SDK is installed once into `~/.shield360/sdk` and reused. For Python, the app's interpreter needs the `shield360` package. The command's output, exit status and Ctrl-C pass straight through.
+
+To bake it into the app's container image instead, `shield360 init --write` adds the SDK (Node) or the agent (Java) to the Dockerfile and writes the app's settings next to it; see [shield360 init](https://shield360.ai).
+
+To set it up in the app itself, or for a production start command:
+
 <Tabs>
   <Tab title="Node.js">
     ```bash
@@ -50,7 +64,7 @@ The API key decides which project environment the app reports to. See [Pin the c
     | APIs and messaging | GraphQL, gRPC, Kafka (`kafkajs`), the AWS SDK |
     | AI | Every provider and framework in the [integrations](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/overview.mdx) list |
 
-    Values stay out of what is recorded: a Redis command is stored by name only (`GET`, not its key or value), GraphQL field values and MongoDB query values are left out, and SQL is recorded without parameters. Health probes (Kubernetes, load balancers, uptime checks, `/healthz`-style paths) and the SDK's own calls to Shield360 are not traced. Turn one off with `SHIELD360_DISABLED_INSTRUMENTORS`, for example `SHIELD360_DISABLED_INSTRUMENTORS=graphql,kafkajs`.
+    Values stay out of what is recorded: a Redis command is stored by name only (`GET`, not its key or value), GraphQL field values and MongoDB query values are left out, SQL is recorded without parameters (numbers and quoted strings in a `mysql2` query become `?`), a Kafka message key is stored as `?`, and message payloads are never recorded. Health probes (Kubernetes, load balancers, uptime checks, `/healthz`-style paths) and the SDK's own calls to Shield360 are not traced. Turn one off with `SHIELD360_DISABLED_INSTRUMENTORS`, for example `SHIELD360_DISABLED_INSTRUMENTORS=graphql,kafkajs`.
 
     `SHIELD360_GUARDS` turns guards on for the app's LLM calls: guard kinds (`prompt_injection`, `pii`, `moderation`), each with an action after a colon (`allow`, `warn`, `redact`, or `block`). The guards also send the heartbeat the [Secured by Shield360 badge](https://shield360.ai) reads. A bundled app must keep its LLM client (`@anthropic-ai/sdk`, `openai`) outside the bundle, installed beside it.
   </Tab>
@@ -61,6 +75,8 @@ The API key decides which project environment the app reports to. See [Pin the c
     ```
 
     With `SHIELD360_RASP` set, the runtime protection middleware is added to Flask, Starlette/FastAPI and Django apps as they are created. Your app's own `sitecustomize` still runs.
+
+    Each request to a Django, Flask, FastAPI, Starlette, Pyramid, Falcon or Tornado app becomes a trace named by its route (`GET /orders/<oid>`). Inside it appear outgoing HTTP (`requests`, `httpx`, `aiohttp`, `urllib`, `urllib3`), PostgreSQL (`psycopg`, `psycopg2`, `asyncpg`), SQLAlchemy, MySQL (`pymysql`, `mysqlclient`), MongoDB (`pymongo`), Redis, Celery tasks, gRPC, Kafka (`kafka-python`, `confluent-kafka`) and AWS calls (`botocore`, so `boto3` too). Message payloads and keys are never recorded. For GraphQL, add your framework's OpenTelemetry extension (Strawberry's `OpenTelemetryExtension`, Ariadne's `OpenTelemetryExtension`); its spans join the request trace. Values stay out: a Redis command is stored as `GET ?`, MongoDB statements are off, and SQL is recorded without parameters. Health paths (`/healthz`, `/readyz`, `/livez`, `/health`, `/ping`, `/metrics` and the like) and calls to `SHIELD360_URL` are not traced unless you set `OTEL_PYTHON_EXCLUDED_URLS` yourself. Turn an instrumentation off with `SHIELD360_DISABLED_INSTRUMENTORS`, for example `redis,celery`.
   </Tab>
   <Tab title=".NET">
     ```bash
@@ -73,17 +89,23 @@ The API key decides which project environment the app reports to. See [Pin the c
     ```
 
     On .NET 8 and 9 the two extra variables let the host load the newer framework libraries Shield360 needs.
+
+    Each ASP.NET Core request becomes a trace named by its route (`GET /orders/{id}`), with the app's `HttpClient` calls, SQL Server commands (`Microsoft.Data.SqlClient`, `System.Data.SqlClient`), MySQL commands (`MySqlConnector`), MongoDB operations (`MongoDB.Driver` 3.x) and gRPC client calls (`Grpc.Net.Client`, with `rpc.*` attributes) inside it. SQL is recorded without parameters, MongoDB without its query, gRPC without messages. Health probes (Kubernetes, load balancers, uptime checks, `/healthz`-style paths) and calls to `SHIELD360_URL` are not traced. Turn one off with `SHIELD360_DISABLED_INSTRUMENTORS`: `aspnetcore`, `http`, `sqlclient`, `mysqlconnector`, `mongodb` or `grpc`. Redis (`StackExchange.Redis`), Kafka (`Confluent.Kafka`) and the AWS SDK need their OpenTelemetry package added to the app (`OpenTelemetry.Instrumentation.StackExchangeRedis`, `OpenTelemetry.Instrumentation.ConfluentKafka`, `OpenTelemetry.Instrumentation.AWS`); their spans join the same trace. An app that starts Shield360 in code calls `builder.Services.AddShield360RequestTracing()` (from `Shield360.AspNetCore`) after `AddShield360`.
   </Tab>
   <Tab title="Java">
     ```bash
     java -javaagent:/path/to/shield360-agent.jar -jar your-app.jar
     ```
 
+    For telemetry with no code change, start the app with `shield360 run -- java -jar your-app.jar`: it adds the OpenTelemetry Java agent, which traces HTTP, JDBC, Redis, Kafka and gRPC and sends logs to Shield360. The Shield360 agent below adds runtime protection; both can run together.
+
     The agent turns runtime protection on and installs the sink hooks with no code change. Register the `Shield360RaspFilter` servlet filter as well, so runtime protection sees each request's input. The agent doesn't set up telemetry: add `shield360-sdk` and call `Shield360.init` for that.
   </Tab>
 </Tabs>
 
 Go, PHP and Rust have no zero-code entry point. Go and Rust compile the checks into the app, and PHP starts through its bootstrap. See each SDK's reference.
+
+In Go, three one-line wraps give the same request tracing after `shield360.Init`: `shield360.Handler(mux, "orders-api")` traces each request by its `ServeMux` route (`GET /orders/{id}`) and leaves health probes out, `shield360.HTTPClient()` (or `shield360.Transport(base)`) traces outgoing calls except those to Shield360, and `shield360.OpenDB(driver, dsn)` traces SQL statements without their arguments. Redis, MongoDB, gRPC, Kafka and AWS calls join the trace through one-line hooks in their own packages: `goredis.Instrument(rdb)`, `mongodb.Monitor()`, `grpctrace.DialOption()` / `grpctrace.ServerOption()`, `kafkago.WriteMessages` / `kafkago.StartProcess` and `awstrace.Instrument(&cfg)` (see the Go SDK README). Keys, values, documents and message payloads are never recorded.
 
 ## On Kubernetes
 

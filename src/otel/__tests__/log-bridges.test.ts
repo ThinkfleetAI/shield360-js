@@ -61,6 +61,61 @@ describe('logger bridges', () => {
       expect(out.written).toEqual([line + '\n']);
     });
 
+    it("takes Node's process warnings on stderr as warn, with the lines written with them", () => {
+      const out = fakeStream();
+      const err = fakeStream();
+      captureStdio({ stdout: out.stream as never, stderr: err.stream as never });
+      err.stream.write(
+        "(node:7) Warning: SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca' are treated as aliases for 'verify-full'.\n" +
+          '(Use `node --trace-warnings ...` to show where the warning was created)\n'
+      );
+      err.stream.write('(node:7) [DEP0040] DeprecationWarning: The `punycode` module is deprecated.\n');
+      err.stream.write('something broke\n');
+      expect(exporter.getFinishedLogRecords().map((r) => r.severityNumber)).toEqual([
+        SeverityNumber.WARN,
+        SeverityNumber.WARN,
+        SeverityNumber.WARN,
+        SeverityNumber.ERROR,
+      ]);
+    });
+
+    it("leaves out the exporter's own failures, even printed as JSON with only a stack", () => {
+      const out = fakeStream();
+      const err = fakeStream();
+      captureStdio({ stdout: out.stream as never, stderr: err.stream as never });
+      err.stream.write(JSON.stringify({ stack: 'Error: Request timed out\n    at ClientRequest.<anonymous> (/opt/shield360/node_modules/@opentelemetry/otlp-exporter-base/src/transport/http-transport-utils.ts:142:16)', message: 'Request timed out' }) + '\n');
+      err.stream.write(JSON.stringify({ stack: 'OTLPExporterError: Export failed with retryable status', message: 'Export failed with retryable status' }) + '\n');
+      err.stream.write(JSON.stringify({ level: 'error', msg: 'payment failed', err: { name: 'Error', message: 'card declined', stack: 'Error: card declined\n at /app/index.mjs:1:1' } }) + '\n');
+      expect(exporter.getFinishedLogRecords().map((r) => r.body)).toEqual(['payment failed']);
+      expect(err.written).toHaveLength(3);
+    });
+
+    it('keeps one console.log of an object as one record, in order, and still splits separate lines', () => {
+      const out = fakeStream();
+      const err = fakeStream();
+      captureStdio({ stdout: out.stream as never, stderr: err.stream as never });
+      // What Node prints for console.log('request', { ... }) once it is too wide for one line.
+      out.stream.write("request {\n  requestId: 'r-1',\n  method: 'GET',\n  status: 200,\n  path: '/',\n  durationMs: 0\n}\n");
+      out.stream.write('first line\nsecond line\n');
+      err.stream.write('Error: boom\n    at handler (/app/index.js:3:9)\n    at run (/app/index.js:9:1)\n');
+      expect(exporter.getFinishedLogRecords().map((r) => r.body)).toEqual([
+        "request {\n  requestId: 'r-1',\n  method: 'GET',\n  status: 200,\n  path: '/',\n  durationMs: 0\n}",
+        'first line',
+        'second line',
+        'Error: boom\n    at handler (/app/index.js:3:9)\n    at run (/app/index.js:9:1)',
+      ]);
+    });
+
+    it('joins a pretty-printed JSON line into one record with its fields', () => {
+      const out = fakeStream();
+      const err = fakeStream();
+      captureStdio({ stdout: out.stream as never, stderr: err.stream as never });
+      out.stream.write(JSON.stringify({ level: 'warn', msg: 'slow query', ms: 900 }, null, 2) + '\n');
+      const records = exporter.getFinishedLogRecords();
+      expect(records.map((r) => [r.body, r.severityNumber])).toEqual([['slow query', SeverityNumber.WARN]]);
+      expect(records[0].attributes).toEqual({ ms: 900 });
+    });
+
     it('joins lines split across writes, takes plain lines as text, and passes callbacks through', () => {
       const out = fakeStream();
       const err = fakeStream();

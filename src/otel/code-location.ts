@@ -1,6 +1,9 @@
 /**
- * Code location on GenAI spans: code.function.name, code.file.path and
- * code.line.number of the application call site that started the span.
+ * Code location on GenAI spans, and on the app's outbound calls (database,
+ * HTTP, RPC and messaging client spans): code.function.name, code.file.path
+ * and code.line.number of the application call site that started the span.
+ * Shield360 joins it to the costly code patterns `shield360 scan` finds, so
+ * an N+1 query is priced by what its call site cost at runtime.
  *
  * A SpanProcessor's onStart runs synchronously inside tracer.startSpan, so
  * the caller's stack is still live there and one processor covers every
@@ -11,7 +14,7 @@ import { existsSync } from 'fs';
 import { homedir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import type { Context } from '@opentelemetry/api';
+import { SpanKind, type Context } from '@opentelemetry/api';
 import type { ReadableSpan, Span, SpanProcessor } from '@opentelemetry/sdk-trace-node';
 import { INSTRUMENTATION_PREFIX } from '../constant';
 
@@ -38,6 +41,8 @@ export interface CodeLocationOptions {
   codeRoot?: string;
   cwd?: string;
   home?: string;
+  /** Also stamp database, HTTP, RPC and messaging client spans (default: resolveCaptureCallLocation()). */
+  calls?: boolean;
 }
 
 interface Frame {
@@ -45,6 +50,19 @@ interface Frame {
   filePath: string;
   lineNumber: number;
 }
+
+/**
+ * Whether outbound calls are stamped too: the option wins; otherwise
+ * SHIELD360_CAPTURE_CALL_LOCATION; default on. Off leaves GenAI spans only.
+ */
+export function resolveCaptureCallLocation(option?: boolean): boolean {
+  if (option !== undefined) return option;
+  const env = process.env.SHIELD360_CAPTURE_CALL_LOCATION;
+  return !(env && FALSY.has(env.trim().toLowerCase()));
+}
+
+/** Attributes that make a client span an outbound call worth locating. */
+const CALL_ATTRIBUTES = ['db.system', 'db.system.name', 'http.request.method', 'http.method', 'url.full', 'rpc.system', 'messaging.system'];
 
 /** captureCodeLocation option wins; otherwise SHIELD360_CAPTURE_CODE_LOCATION; default on. */
 export function resolveCaptureCodeLocation(option?: boolean): boolean {
@@ -167,14 +185,16 @@ export class CodeLocationSpanProcessor implements SpanProcessor {
   private readonly normaliser: PathNormaliser;
   // Raw frame line -> parsed application frame, or null when not one.
   private readonly cache = new Map<string, Frame | null>();
+  private readonly calls: boolean;
 
   constructor(options: CodeLocationOptions = {}) {
     this.normaliser = new PathNormaliser(options);
+    this.calls = resolveCaptureCallLocation(options.calls);
   }
 
   onStart(span: Span, _parentContext: Context): void {
     try {
-      if (!isGenAISpan(span)) return;
+      if (!isGenAISpan(span) && !(this.calls && isCallSpan(span))) return;
       const attrs = span.attributes;
       if (
         attrs[ATTR_CODE_FUNCTION_NAME] !== undefined ||
@@ -240,6 +260,12 @@ function isGenAISpan(span: Span): boolean {
   if (span.attributes[GEN_AI_OPERATION] !== undefined) return true;
   const scope = span.instrumentationScope?.name;
   return scope !== undefined && LATE_OPERATION_SCOPES.has(scope);
+}
+
+/** A database, HTTP, RPC or messaging client (or producer) span. */
+export function isCallSpan(span: Pick<Span, 'kind' | 'attributes'>): boolean {
+  if (span.kind !== SpanKind.CLIENT && span.kind !== SpanKind.PRODUCER) return false;
+  return CALL_ATTRIBUTES.some((key) => span.attributes[key] !== undefined);
 }
 
 function captureStack(): string | undefined {

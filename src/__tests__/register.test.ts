@@ -99,6 +99,16 @@ describe('shield360/register', () => {
     }
   });
 
+  it("does nothing in the app's own worker threads, where a NODE_OPTIONS preload runs again", async () => {
+    jest.doMock('worker_threads', () => ({ ...jest.requireActual('worker_threads'), isInternalThread: false, isMainThread: false }));
+    try {
+      await import('../register');
+      expect(initMock).not.toHaveBeenCalled();
+    } finally {
+      jest.dontMock('worker_threads');
+    }
+  });
+
   it('registers the ESM loader hook from the main thread only', async () => {
     const registerMock = jest.fn();
     jest.doMock('module', () => ({ ...jest.requireActual('module'), register: registerMock }));
@@ -106,7 +116,8 @@ describe('shield360/register', () => {
     try {
       jest.doMock('worker_threads', () => ({ ...jest.requireActual('worker_threads'), isInternalThread: false, isMainThread: false }));
       await import('../register');
-      expect(initMock).toHaveBeenCalledTimes(1);
+      // A worker thread starts nothing, the hook included.
+      expect(initMock).not.toHaveBeenCalled();
       expect(registerMock).not.toHaveBeenCalled();
 
       jest.resetModules();
@@ -115,6 +126,7 @@ describe('shield360/register', () => {
       jest.doMock('module', () => ({ ...jest.requireActual('module'), register: registerMock }));
       jest.doMock('worker_threads', () => ({ ...jest.requireActual('worker_threads'), isInternalThread: false, isMainThread: true }));
       await import('../register');
+      expect(initMock).toHaveBeenCalledTimes(1);
       expect(registerMock).toHaveBeenCalledTimes(1);
       expect(registerMock).toHaveBeenCalledWith('@opentelemetry/instrumentation/hook.mjs', expect.stringMatching(/^file:/));
     } finally {

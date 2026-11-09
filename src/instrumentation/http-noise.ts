@@ -35,6 +35,14 @@ export function isOwnCall(host: string | undefined, own: string = shield360Host(
   return !!own && !!host && host.toLowerCase() === own;
 }
 
+const KAFKA_MESSAGE_KEY = 'messaging.kafka.message.key';
+
+/** Replaces the Kafka message key the instrumentation recorded with '?'. */
+export function maskKafkaKey(span: { setAttribute(key: string, value: string): unknown }, info: { message?: { key?: unknown } | null }): void {
+  // The instrumentation records a key only when it is truthy.
+  if (info?.message?.key) span.setAttribute(KAFKA_MESSAGE_KEY, '?');
+}
+
 /** The options each default community instrumentation is created with (health probes and own calls left out, values kept out of statements). */
 export function communityOptions(name: string): Record<string, unknown> | undefined {
   if (name === 'http') {
@@ -79,6 +87,14 @@ export function communityOptions(name: string): Record<string, unknown> | undefi
   if (name === 'graphql') return { ignoreTrivialResolveSpans: true, mergeItems: true, allowValues: false };
   // Query shapes only, values replaced (the instrumentation's default, kept explicit).
   if (name === 'mongodb') return { enhancedDatabaseReporting: false };
+  // mysql2 formats a query's values into db.query.text unless masked: numbers
+  // and quoted strings become '?'.
+  if (name === 'mysql2') return { maskStatement: true };
+  // Bound values stay out of mysql spans (the instrumentation's default, kept explicit).
+  if (name === 'mysql') return { enhancedDatabaseReporting: false };
+  // A Kafka message key often names a person or account: recorded as '?'.
+  // Payloads are never recorded by the instrumentation.
+  if (name === 'kafkajs') return { producerHook: maskKafkaKey, consumerHook: maskKafkaKey };
   // The SDK call is the span; the HTTP request under it would repeat it.
   if (name === 'aws-sdk') return { suppressInternalInstrumentation: true };
   return undefined;

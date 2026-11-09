@@ -1,0 +1,226 @@
+---
+title: "Vercel and Next.js: trace a Next.js app"
+sidebarTitle: "Vercel and Next.js"
+description: "Start the Shield360 SDK from Next.js instrumentation.ts, flush spans before Vercel freezes the function, and trace Edge routes with the fetch-based exporter."
+---
+
+Next.js has a start-up hook, `instrumentation.ts`, that runs once per server instance before any route. Start Shield360 there, and every route in the Node.js runtime is traced, including LLM calls, outgoing `fetch` and database queries. Edge routes can't run the Node.js SDK, so they use the small fetch-based exporter instead.
+
+| Runtime | What to use | What is traced |
+|---|---|---|
+| Node.js (the default) | `shield360` from `instrumentation.ts` | Everything the SDK instruments: LLM providers, HTTP, databases, application logs |
+| Edge | `shield360/workers` in the route | The request and the calls you wrap with `tracedFetch` or `span` |
+
+<Info>
+`shield360/lambda` (for `flushTelemetry`) and `shield360/workers` are in the Node.js SDK from version 1.2.4.
+</Info>
+
+<Accordion title="Complete example: a Next.js app with a Node.js and an Edge route">
+`instrumentation.ts`:
+
+```typescript
+// Next.js runs register() once per server instance, before any route.
+export async function register() {
+  // The Node.js runtime only. Edge routes use shield360/workers instead (see the docs).
+  if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { default: Shield360 } = await import('shield360');
+    Shield360.init({
+      applicationName: process.env.OTEL_SERVICE_NAME ?? 'nextjs-vercel-example',
+      environment: process.env.VERCEL_ENV ?? 'development',
+    });
+  }
+}
+```
+
+`next.config.mjs`:
+
+```javascript
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // Shield360's instrumentation patches packages as Node.js loads them, so the SDK
+  // and the LLM clients it instruments stay outside the server bundle.
+  serverExternalPackages: ['shield360', 'openai', '@anthropic-ai/sdk'],
+};
+
+export default nextConfig;
+```
+
+`app/api/hello/route.ts` (Node.js runtime):
+
+```typescript
+import { after } from 'next/server';
+import { flushTelemetry } from 'shield360/lambda';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(): Promise<Response> {
+  // Work done here (LLM calls, fetch, database queries) is traced by the SDK.
+  const body = { hello: 'world', at: new Date().toISOString() };
+
+  // Vercel may freeze the function once the response is sent: flush the spans
+  // after the response, for at most two seconds.
+  after(() => flushTelemetry(2000));
+  return Response.json(body);
+}
+```
+
+`app/api/edge/route.ts` (Edge runtime):
+
+```typescript
+import { after } from 'next/server';
+import { tracedFetch, withShield360 } from 'shield360/workers';
+
+// The Edge runtime has no Node.js APIs, so the Node.js SDK does not run here.
+// shield360/workers has no dependencies and exports spans with fetch.
+export const runtime = 'edge';
+
+const traced = withShield360({
+  async fetch(_request: Request, _env: unknown, ctx: any): Promise<Response> {
+    const upstream = await tracedFetch(ctx, 'https://example.com/');
+    return Response.json({ upstreamStatus: upstream.status });
+  },
+});
+
+export function GET(request: Request): Promise<Response> {
+  // Next.js's after() plays the part of a Worker's ctx.waitUntil.
+  return traced.fetch(request, process.env, { waitUntil: (p: Promise<unknown>) => after(p) });
+}
+```
+
+`package.json`:
+
+```json
+{
+  "name": "shield360-nextjs-vercel-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^15.5.28",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "shield360": "^1.2.4"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.1.0",
+    "typescript": "^5.8.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+```
+</Accordion>
+
+## Configure
+
+Add these environment variables in the Vercel project (**Settings → Environment Variables**), or in `.env.local` for `next dev`:
+
+```bash
+SHIELD360_URL=https://app.shield360.ai
+SHIELD360_API_KEY=<your API key>          # Settings → Developer → API keys
+OTEL_SERVICE_NAME=storefront
+```
+
+<Warning>
+Don't prefix these with `NEXT_PUBLIC_`. That would put the API key in the browser bundle.
+</Warning>
+
+## Node.js runtime
+
+<Steps>
+  <Step title="Install the SDK">
+    ```bash
+    npm install shield360
+    ```
+  </Step>
+  <Step title="Start Shield360 in instrumentation.ts">
+    Create `instrumentation.ts` in the project root, or in `src/` if your app lives there:
+
+    ```typescript
+    export async function register() {
+      if (process.env.NEXT_RUNTIME === 'nodejs') {
+        const { default: Shield360 } = await import('shield360');
+        Shield360.init({
+          applicationName: process.env.OTEL_SERVICE_NAME,
+          environment: process.env.VERCEL_ENV ?? 'development',
+        });
+      }
+    }
+    ```
+
+    The `NEXT_RUNTIME` check keeps the Node.js SDK out of the Edge bundle.
+  </Step>
+  <Step title="Keep the SDK and LLM clients out of the server bundle">
+    The SDK instruments packages as Node.js loads them, so it can't see packages that Next.js bundles into the route. In `next.config.mjs`:
+
+    ```javascript
+    const nextConfig = {
+      serverExternalPackages: ['shield360', 'openai', '@anthropic-ai/sdk'],
+    };
+    export default nextConfig;
+    ```
+
+    List each LLM client your app uses. On Next.js 14, the setting is `experimental.serverComponentsExternalPackages`, and `instrumentation.ts` needs `experimental.instrumentationHook: true`.
+  </Step>
+  <Step title="Flush before the function is frozen">
+    Vercel can freeze a function as soon as the response is sent, and spans still waiting in the batch are lost. In route handlers, flush after the response with `after()`:
+
+    ```typescript
+    import { after } from 'next/server';
+    import { flushTelemetry } from 'shield360/lambda';
+
+    export async function POST(request: Request) {
+      const answer = await askTheModel(await request.json());
+      after(() => flushTelemetry(2000));
+      return Response.json(answer);
+    }
+    ```
+
+    `flushTelemetry(timeoutMs)` flushes traces, metrics and logs and gives up after the timeout. It works on any serverless Node.js platform, not only Lambda. On Next.js 14, which has no `after()`, call `waitUntil(flushTelemetry(2000))` with `waitUntil` from `@vercel/functions`.
+  </Step>
+</Steps>
+
+### Next.js limits
+
+- Spans that end after the flush wait for the next flush on the same instance. If the instance is shut down before then, they are lost.
+- Server actions and pages are traced by the same SDK. Call `after(() => flushTelemetry())` in them too, or rely on a later request's flush.
+- `next dev` restarts the server on some changes. The SDK starts again, which is expected.
+
+## Edge runtime
+
+The Edge runtime has no Node.js APIs, so the Node.js SDK doesn't run there. Use `shield360/workers`. It has no dependencies and sends spans over OTLP/HTTP with `fetch`. Where a Worker would pass `ctx`, pass an object whose `waitUntil` hands the export to Next.js's `after()`:
+
+```typescript
+import { after } from 'next/server';
+import { tracedFetch, withShield360 } from 'shield360/workers';
+
+export const runtime = 'edge';
+
+const traced = withShield360({
+  async fetch(request: Request, _env: unknown, ctx: any) {
+    const upstream = await tracedFetch(ctx, 'https://api.example.com/data');
+    return Response.json(await upstream.json());
+  },
+});
+
+export function GET(request: Request) {
+  return traced.fetch(request, process.env, { waitUntil: (p: Promise<unknown>) => after(p) });
+}
+```
+
+Each request becomes a span, and `tracedFetch` and `span` add child spans. There's no automatic LLM instrumentation, guards or application logs on Edge. Call the model through `tracedFetch` to see its latency and status. See [Cloudflare Workers](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/cloudflare-workers.mdx) for the full API.
+
+Edge Middleware (`middleware.ts`) works the same way: wrap the middleware function's work in `withShield360` and pass `waitUntil` from the `event` argument.
+
+## Next steps
+
+- [AWS Lambda](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/aws-lambda.mdx)
+- [Cloudflare Workers](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/cloudflare-workers.mdx)
+- [SDK configuration](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/configuration.mdx)

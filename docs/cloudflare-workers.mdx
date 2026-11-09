@@ -1,0 +1,178 @@
+---
+title: "Cloudflare Workers: trace a Worker"
+sidebarTitle: "Cloudflare Workers"
+description: "Trace Cloudflare Workers fetch, scheduled and queue handlers with a dependency-free wrapper that sends spans to Shield360 after the response through ctx.waitUntil."
+---
+
+`shield360/workers` traces a Worker with no dependencies and no Node.js APIs. Wrap the Worker's handlers with `withShield360`, and each invocation becomes a span. The spans are sent over OTLP/HTTP with `fetch` after the response, through `ctx.waitUntil`, so they don't slow the response down. The wrapper adds about 8 KB to the bundle, and the Worker doesn't need the `nodejs_compat` flag.
+
+<Info>
+`shield360/workers` is in the Node.js SDK from version 1.2.4.
+</Info>
+
+<Accordion title="Complete example: a Worker with a traced fetch, a child span and a Cron Trigger">
+`src/index.ts`:
+
+```typescript
+import { span, tracedFetch, withShield360 } from 'shield360/workers';
+
+interface Env {
+  SHIELD360_URL: string;
+  SHIELD360_API_KEY: string;
+  OTEL_SERVICE_NAME?: string;
+}
+
+export default withShield360({
+  // Each request becomes a SERVER span. Child spans name their parent (ctx) explicitly.
+  async fetch(request: Request, _env: Env, ctx: ExecutionContext): Promise<Response> {
+    const upstream = await tracedFetch(ctx, 'https://example.com/');
+    const page = await upstream.text();
+    return span(ctx, 'summarize', (s) => {
+      s.setAttribute('page.bytes', page.length);
+      return Response.json({ path: new URL(request.url).pathname, upstreamStatus: upstream.status });
+    });
+  },
+
+  // Cron Triggers are traced too.
+  async scheduled(_controller: ScheduledController, _env: Env, _ctx: ExecutionContext): Promise<void> {
+    // periodic work
+  },
+});
+```
+
+`wrangler.toml`:
+
+```toml
+name = "shield360-worker-example"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# No nodejs_compat flag: shield360/workers uses only Web APIs.
+
+[vars]
+SHIELD360_URL = "https://app.shield360.ai"
+OTEL_SERVICE_NAME = "shield360-worker-example"
+
+# The API key is a secret, not a var:
+#   npx wrangler secret put SHIELD360_API_KEY
+
+[triggers]
+crons = ["*/30 * * * *"]
+```
+
+`package.json`:
+
+```json
+{
+  "name": "shield360-cloudflare-worker-example",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "wrangler deploy --dry-run --outdir dist"
+  },
+  "dependencies": {
+    "shield360": "^1.2.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261103.1",
+    "typescript": "^5.8.3",
+    "wrangler": "^4.157.0"
+  }
+}
+```
+</Accordion>
+
+## Set up
+
+<Steps>
+  <Step title="Install">
+    ```bash
+    npm install shield360
+    ```
+
+    Wrangler bundles only `shield360/workers`. The rest of the package is for Node.js and is never bundled.
+  </Step>
+  <Step title="Configure">
+    In `wrangler.toml`:
+
+    ```toml
+    [vars]
+    SHIELD360_URL = "https://app.shield360.ai"
+    OTEL_SERVICE_NAME = "edge-api"
+    ```
+
+    Store the API key as a secret:
+
+    ```bash
+    npx wrangler secret put SHIELD360_API_KEY
+    ```
+
+    To send spans to an OTLP collector of your own, set `OTEL_EXPORTER_OTLP_ENDPOINT` and, when the collector needs them, `OTEL_EXPORTER_OTLP_HEADERS` (`name=value` pairs, comma-separated). An endpoint you set takes precedence over `SHIELD360_URL`.
+  </Step>
+  <Step title="Wrap the handlers">
+    ```typescript
+    import { span, tracedFetch, withShield360 } from 'shield360/workers';
+
+    export default withShield360({
+      async fetch(request, env, ctx) {
+        const upstream = await tracedFetch(ctx, 'https://api.openai.com/v1/responses', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ model: 'gpt-5-mini', input: 'Say hello' }),
+        });
+        return span(ctx, 'render', async () => new Response(await upstream.text()));
+      },
+
+      async scheduled(controller, env, ctx) {
+        // Cron Triggers are traced too.
+      },
+
+      async queue(batch, env, ctx) {
+        // And Queue consumers.
+      },
+    });
+    ```
+  </Step>
+</Steps>
+
+## What is recorded
+
+| Handler | Span | Attributes |
+|---|---|---|
+| `fetch` | `SERVER`, named by the method | `faas.trigger=http`, `faas.coldstart`, `faas.invocation_id` (the `cf-ray` ID), `http.request.method`, `url.scheme`, `server.address`, `url.path`, `user_agent.original`, `http.response.status_code`, `cloudflare.colo` |
+| `scheduled` | `SERVER`, `scheduled <cron>` | `faas.trigger=timer`, `faas.cron`, `faas.coldstart` |
+| `queue` | `CONSUMER`, `<queue> process` | `faas.trigger=pubsub`, `messaging.system=cloudflare_queues`, `messaging.destination.name`, `messaging.batch.message_count` |
+
+The resource carries `service.name`, `deployment.environment` (from `OTEL_DEPLOYMENT_ENVIRONMENT`) and `cloud.provider=cloudflare`. A thrown error is recorded on the span and thrown again. A `5xx` response marks the span as an error.
+
+Query strings are never recorded, only the path, because they often hold keys and tokens. When the incoming request has a W3C `traceparent` header, the Worker's spans join the caller's trace.
+
+## API
+
+| Function | What it does |
+|---|---|
+| `withShield360(handlers, config?)` | Wraps `fetch`, `scheduled` and `queue`. Other properties pass through unchanged. |
+| `span(parent, name, fn, attributes?)` | Runs `fn` in a child span and ends it. `parent` is the invocation's `ctx` or another span. |
+| `tracedFetch(parent, input, init?)` | Calls `fetch` in a `CLIENT` span and adds a `traceparent` header so the service you call can join the trace. |
+| `startSpan(parent, name, attributes?, kind?)` | A child span you end yourself with `end()`. |
+
+Workers have no async context, so a child span always names its parent: the `ctx` your handler was given, or a span from `span()` for nesting.
+
+`config` is an object, or a function of the Worker's `env`, with any of: `serviceName`, `environment`, `url`, `apiKey`, `endpoint`, `headers`, `resourceAttributes`, `exportTimeoutMs` (5000 by default) and `propagate` (set it to `false` to leave `traceparent` out of `tracedFetch`). Anything you leave out comes from the bindings.
+
+## Limits
+
+- **No automatic instrumentation.** LLM calls, KV, D1 and R2 aren't traced on their own. Call models through `tracedFetch`, and wrap other work in `span`.
+- **No guards, metrics or application logs** in Workers yet. Only traces are sent.
+- **Time is coarse.** Workers advance the clock only on I/O, so spans that do only CPU work show zero duration. Network calls are timed correctly.
+- **Streaming responses.** The request span ends when the handler returns its `Response`, not when the stream finishes.
+- **Durable Objects** aren't wrapped. Use `startSpan` with a parent span you pass in.
+- An export that fails or takes longer than `exportTimeoutMs` is dropped and logged once. It never fails the request.
+
+## Next steps
+
+- [Vercel and Next.js](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/vercel.mdx)
+- [AWS Lambda](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/aws-lambda.mdx)
+- [SDK configuration](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/configuration.mdx)

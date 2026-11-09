@@ -1,0 +1,114 @@
+---
+title: "OpenTelemetry in any language"
+sidebarTitle: "Any OpenTelemetry language"
+description: "Send traces, logs and metrics to Shield360 from Java, Ruby, PHP, Rust, Elixir, C++ or any app that exports OTLP, with the standard OpenTelemetry exporter settings."
+---
+
+Shield360 accepts standard OTLP over HTTP. Any language with an OpenTelemetry SDK can send to it without a Shield360 SDK: point the exporter at your Shield360 address and send the project's API key as a bearer token.
+
+## 1. Create an API key
+
+Create a key in **Settings → API keys**, for the environment the app sends to. Store it where the app runs, as the `SHIELD360_API_KEY` environment variable or in a secret store. Don't write it in code or in a config file that is committed.
+
+## 2. Set the exporter settings
+
+These are the standard OpenTelemetry variables. Every SDK below reads them. Replace `https://app.shield360.ai` with your own address if you self-host. **Setup → Other ways to connect** (`/setup?tab=guides`) in the app shows these settings with your address filled in.
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=https://app.shield360.ai/api/ingest/otlp
+export OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=Bearer%20${SHIELD360_API_KEY}"
+export OTEL_SERVICE_NAME=orders-api
+export OTEL_RESOURCE_ATTRIBUTES=deployment.environment=production
+```
+
+The SDKs append `/v1/traces`, `/v1/logs` and `/v1/metrics` themselves. The space after `Bearer` is written `%20`, as the OpenTelemetry spec asks for header values.
+
+## 3. Turn on the SDK
+
+<Tabs>
+  <Tab title="Java">
+    The OpenTelemetry Java agent instruments HTTP servers and clients, JDBC, Redis, Kafka, gRPC and logging with no code change:
+
+    ```bash
+    curl -fsSLO https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+    java -javaagent:opentelemetry-javaagent.jar -jar app.jar
+    ```
+
+    `shield360 run -- java -jar app.jar` does the same: it downloads a pinned agent version and checks its SHA-256. See [`shield360 run`](https://shield360.ai).
+  </Tab>
+  <Tab title="Ruby">
+    ```ruby
+    # Gemfile: gem 'opentelemetry-sdk', gem 'opentelemetry-exporter-otlp', gem 'opentelemetry-instrumentation-all'
+    require 'opentelemetry/sdk'
+    require 'opentelemetry/exporter/otlp'
+    require 'opentelemetry/instrumentation/all'
+    OpenTelemetry::SDK.configure(&:use_all)
+    ```
+
+    In Rails, put it in `config/initializers/opentelemetry.rb`.
+  </Tab>
+  <Tab title="PHP">
+    ```bash
+    pecl install opentelemetry
+    composer require open-telemetry/sdk open-telemetry/exporter-otlp open-telemetry/opentelemetry-auto-laravel
+    export OTEL_PHP_AUTOLOAD_ENABLED=true
+    ```
+
+    Swap `opentelemetry-auto-laravel` for your framework's package (Symfony, Slim, WordPress and others are listed in the OpenTelemetry PHP registry).
+  </Tab>
+  <Tab title="Rust">
+    ```rust
+    // Cargo.toml: opentelemetry, opentelemetry_sdk, opentelemetry-otlp (features = ["http-proto", "reqwest-blocking-client"])
+    let exporter = opentelemetry_otlp::SpanExporter::builder().with_http().build()?;
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .build();
+    opentelemetry::global::set_tracer_provider(provider);
+    ```
+
+    With `tracing`, add `tracing-opentelemetry` to turn spans from `#[instrument]` into OpenTelemetry spans.
+  </Tab>
+  <Tab title="Elixir">
+    ```elixir
+    # mix.exs: {:opentelemetry, "~> 1.5"}, {:opentelemetry_exporter, "~> 1.8"}, {:opentelemetry_phoenix, "~> 2.0"}
+    # config/runtime.exs
+    config :opentelemetry, span_processor: :batch, traces_exporter: :otlp
+    config :opentelemetry_exporter, otlp_protocol: :http_protobuf
+    ```
+
+    Then call `OpentelemetryPhoenix.setup()` in your application's `start/2`.
+  </Tab>
+  <Tab title="C++">
+    ```cpp
+    // opentelemetry-cpp built with WITH_OTLP_HTTP=ON; the exporter reads OTEL_EXPORTER_OTLP_* from the environment
+    auto exporter = opentelemetry::exporter::otlp::OtlpHttpExporterFactory::Create();
+    auto processor = opentelemetry::sdk::trace::BatchSpanProcessorFactory::Create(std::move(exporter), {});
+    std::shared_ptr<opentelemetry::trace::TracerProvider> provider =
+        opentelemetry::sdk::trace::TracerProviderFactory::Create(std::move(processor));
+    opentelemetry::trace::Provider::SetTracerProvider(provider);
+    ```
+  </Tab>
+  <Tab title="Through a Collector">
+    For an app that already exports OTLP somewhere, or many apps at once, add Shield360 as an exporter in an OpenTelemetry Collector:
+
+    ```yaml
+    exporters:
+      otlphttp/shield360:
+        endpoint: https://app.shield360.ai/api/ingest/otlp
+        headers:
+          Authorization: Bearer ${env:SHIELD360_API_KEY}
+    service:
+      pipelines:
+        traces: { receivers: [otlp], exporters: [otlphttp/shield360] }
+        logs: { receivers: [otlp], exporters: [otlphttp/shield360] }
+        metrics: { receivers: [otlp], exporters: [otlphttp/shield360] }
+    ```
+  </Tab>
+</Tabs>
+
+## 4. Check it arrived
+
+Start the app and send it a request. Within a minute the app shows up under its `OTEL_SERVICE_NAME` in **Telemetry → Services**, and its spans show in **Traces**.
+
+A Shield360 SDK adds AI-call cost, guardrails and runtime protection on top of plain OpenTelemetry. See [all setup guides](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/setup-guides.mdx) for which languages have one.

@@ -57,6 +57,8 @@ import { ATTR_SERVICE_VERSION, resolveBuildAttributes } from './otel/build-info'
 import { configureFeedback, feedback, getCurrentSpanId, getCurrentTraceId } from './feedback';
 // SHIELD: runtime protection (RASP), opt-in.
 import { initRasp, disableRasp, enableRasp } from './rasp';
+// SHIELD: runtime SCA — the packages the app runs, matched server-side.
+import { startRuntimePackages } from './runtime-packages';
 import { noteSkippedInit, zeroCodeStarted } from './zero-code';
 // SHIELD: application logs, opt-in.
 import {
@@ -401,6 +403,20 @@ class Shield360 extends BaseShield360 {
       Shield360Helper.fetchPricingInfo(resolved.pricingJson).then(
         (info) => { Shield360Config.pricingInfo = info; },
         () => { Shield360Config.pricingInfo = {}; }
+      );
+
+      // SHIELD: runtime SCA — names and versions of the packages loaded, on unless
+      // runtimePackages: false or SHIELD360_RUNTIME_PACKAGES=off. Started before
+      // RASP, which then leaves its own components report to it.
+      startRuntimePackages(
+        {
+          url: resolved.shield360Url,
+          apiKey: resolved.shield360ApiKey,
+          applicationName: resolved.applicationName,
+          environment: resolved.environment,
+          sdkVersion: SDK_VERSION,
+        },
+        options?.runtimePackages,
       );
 
       // SHIELD: runtime protection (RASP): off unless options.rasp or SHIELD360_RASP turns it on.

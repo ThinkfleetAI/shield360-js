@@ -41,6 +41,19 @@ let writing = false;
 
 /** Messages from the telemetry pipeline itself, which must never be exported back into it. */
 const OWN_MESSAGE = /^(@opentelemetry|OTLPExporterError|Shield360[\s:]|\[shield360\]|\{"stack":"OTLPExporterError)/i;
+/**
+ * A whole written line from the pipeline itself: an exporter error the app's logger (or the OTel
+ * diag logger) printed as JSON, whose message alone ("Request timed out") says nothing about where
+ * it came from, but whose stack runs through the exporter or the SDK. Exporting it would report
+ * every failed export as an application error (SKUFlow, 2026-11-02) and feed the next one.
+ */
+const OWN_LINE = /OTLPExporterError|[\\/]@opentelemetry[\\/](otlp-|exporter-|sdk-)|[\\/]node_modules[\\/]shield360[\\/]/;
+/**
+ * Node's own process warnings on stderr ("(node:7) Warning: …", "(node:7) [DEP0040]
+ * DeprecationWarning: …"), written as one block with their follow-on lines ("(Use `node
+ * --trace-warnings ...`"): warnings, not errors.
+ */
+const NODE_WARNING = /^\(node:\d+\) (\[[A-Z0-9_]+\] )?[A-Za-z]*Warning:/;
 
 /** The bridge's logger: its own scope and its own rate limit. */
 function bridgeLogger(fallbackName: string, options: BridgeOptions): Shield360Logger {
@@ -250,7 +263,7 @@ let stdioOriginal: { stream: WritableLike; write: WritableLike['write']; own: bo
 
 /** One written line as a record: JSON log lines (pino, bunyan and most JSON loggers) by their fields, other lines as text. */
 function emitLine(emit: ReturnType<typeof guarded>, line: string, plainLevel: LogLevel): void {
-  if (!line.trim()) return;
+  if (!line.trim() || OWN_LINE.test(line)) return;
   let record: unknown;
   try {
     record = line.trimStart().startsWith('{') ? JSON.parse(line) : undefined;
@@ -274,10 +287,58 @@ function emitLine(emit: ReturnType<typeof guarded>, line: string, plainLevel: Lo
   emit(fields.level === undefined ? plainLevel : pinoLevel(fields.level), message, attributes);
 }
 
+/** A line that continues the one before it: indented, or closing a bracket that is still open. */
+const CONTINUATION = /^\s+\S|^[}\])]/;
+
+/** Brackets a line leaves open; quoted text is skipped. */
+function openBrackets(text: string): number {
+  let depth = 0;
+  let quote = '';
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = '';
+    } else if (c === '"' || c === "'" || c === '`') quote = c;
+    else if (c === '{' || c === '[' || c === '(') depth++;
+    else if (c === '}' || c === ']' || c === ')') depth--;
+  }
+  return depth;
+}
+
+/**
+ * The lines of one write as records: a line that continues the one before it
+ * (a console.log of an object, a stack trace) joins it, so one call is one
+ * record rather than one record per line, all with the same timestamp.
+ * Bounded by MAX_PENDING characters per record.
+ */
+export function joinContinuations(lines: string[]): string[] {
+  const blocks: string[] = [];
+  let open = 0;
+  for (const line of lines) {
+    const last = blocks.length - 1;
+    const continues =
+      last >= 0 &&
+      blocks[last].trim() !== '' &&
+      CONTINUATION.test(line) &&
+      (/^\s/.test(line) || open > 0) &&
+      blocks[last].length + 1 + line.length <= MAX_PENDING;
+    if (continues) {
+      blocks[last] += `\n${line}`;
+      open += openBrackets(line);
+    } else {
+      blocks.push(line);
+      open = Math.max(0, openBrackets(line));
+    }
+  }
+  return blocks;
+}
+
 /**
  * Copies every line written to stdout and stderr to Shield360 application logs; the output itself
  * is unchanged. JSON lines keep their level, message, fields and error; plain lines are info on
- * stdout and error on stderr. Lines split across writes are joined. Call releaseStdio() to stop.
+ * stdout and error on stderr, except Node's process warnings, which are warn. Lines split across
+ * writes are joined. Lines from the telemetry pipeline itself are left out. Call releaseStdio() to stop.
  */
 export function captureStdio(options: StdioOptions = {}): void {
   if (stdioOriginal) return;
@@ -305,7 +366,12 @@ export function captureStdio(options: StdioOptions = {}): void {
             lines.push(pending);
             pending = '';
           }
-          for (const line of lines) emitLine(emit, line.replace(/\r$/, ''), plainLevel);
+          // A Node warning and the lines written with it are one block, all warn.
+          let level = plainLevel;
+          for (const block of joinContinuations(lines.map((raw) => raw.replace(/\r$/, '')))) {
+            if (plainLevel === 'error' && NODE_WARNING.test(block)) level = 'warn';
+            emitLine(emit, block, level);
+          }
         }
       } catch {
         // Logging never throws into the application.

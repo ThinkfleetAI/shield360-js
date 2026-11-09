@@ -1,0 +1,56 @@
+---
+title: "Setup guides: every way to connect an app"
+sidebarTitle: "Setup guides"
+description: "All the ways to send an app to Shield360 at any stage, from a laptop to CI to production: no-code commands, SDKs, Kubernetes, plain OpenTelemetry, serverless and CI pipelines."
+---
+
+Pick the path that fits where the app runs. Every path needs a project API key. Create one in **Settings → API keys**, or use **Setup → Connect an app** (`/setup`) for a guided setup with a live check. Each path reads the key from `SHIELD360_API_KEY` or a secret.
+
+In the app, **Setup → Other ways to connect** (`/setup?tab=guides`) lists the same guides with your Shield360 address already in every snippet.
+
+## By stage
+
+| Stage | Start with |
+|---|---|
+| Local development | [`shield360 run`](#no-code-change), [`shield360 init`](#no-code-change) |
+| CI | [GitHub Actions or GitLab CI](#ci-pipelines), or `shield360 run` around the test command |
+| Staging and production | [Kubernetes operator and Helm](#kubernetes), an [SDK](#shield360-sdks), [plain OpenTelemetry](#any-opentelemetry-language) or [serverless](#serverless) |
+
+## No code change
+
+| Guide | What it does |
+|---|---|
+| [`shield360 run`](https://shield360.ai) | Starts any Node, Python or Java app with Shield360: `shield360 run -- npm start` |
+| [`shield360 init`](https://shield360.ai) | Reads the repository (language, Dockerfiles, Compose, Kubernetes manifests) and sets it up. It never writes the key |
+| [Zero-code setup](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/zero-code-setup.mdx) | What the preload traces in each runtime |
+
+## Shield360 SDKs
+
+| Language | Guide |
+|---|---|
+| Node.js | [Zero-code setup](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/zero-code-setup.mdx): `npm install shield360`, then `node --require shield360/register app.js` |
+| Python | [SDK overview](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/overview.mdx) |
+| .NET | [.NET overview](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/dotnet-overview.mdx) |
+| Go | [Go overview](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/go-overview.mdx) |
+
+Only the Node.js SDK is in its public registry today. For the others, use `shield360 run` (Python, Java) or [plain OpenTelemetry](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/opentelemetry-any-language.mdx) until their packages are published.
+
+## Kubernetes
+
+[Kubernetes operator](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/kubernetes-operator.mdx): one `helm install` with `injectNamespaces.<namespace>=<language>` opts whole namespaces in, and the operator adds the SDK to every new pod with no image change. The API key is read from a Secret in each namespace. The chart never takes the key itself.
+
+## Any OpenTelemetry language
+
+[OpenTelemetry in any language](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/opentelemetry-any-language.mdx): Java, Ruby, PHP, Rust, Elixir, C++, or any app that exports OTLP (directly or through a Collector). Set the standard `OTEL_EXPORTER_OTLP_*` variables to your Shield360 address and key.
+
+## Serverless
+
+| Platform | Guide |
+|---|---|
+| AWS Lambda | [AWS Lambda](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/aws-lambda.mdx) |
+| Vercel | [Vercel](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/vercel.mdx) |
+| Cloudflare Workers | [Cloudflare Workers](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/cloudflare-workers.mdx) |
+
+## CI pipelines
+
+[CI pipelines](https://shield360.ai): the Shield360 GitHub Action, or a GitLab CI template, to record deploy markers (`shield360 ci release`), send JUnit test results (`shield360 ci tests`) and run a code security scan.

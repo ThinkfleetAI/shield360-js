@@ -1,0 +1,27 @@
+---
+title: 'Rust SDK Overview'
+sidebarTitle: 'Rust SDK Overview'
+icon: 'rust'
+description: 'OpenTelemetry set-up, application logs, feature flags and runtime protection for Rust services.'
+---
+
+The Shield360 Rust SDK sets up OpenTelemetry tracer and meter providers, sends application logs from `log` and `tracing`, evaluates feature flags locally, and adds runtime application self-protection (RASP) with a tower layer and checked sink wrappers. It reads the same `SHIELD360_*` and `OTEL_*` environment variables as the other SDKs.
+
+The minimum supported Rust version is 1.75.
+
+## Install
+
+<Warning>
+The Rust SDK is not on crates.io yet. To get access, [contact us](https://shield360.ai/demo).
+</Warning>
+
+## Features
+
+| Feature | Default | What it adds |
+|---|---|---|
+| `otel` | on | Tracer and meter providers over OTLP/HTTP |
+| `remote` | on | The signed RASP config client and the event reporter |
+| `tracing` | off | A `tracing-subscriber` layer that sends events as application logs |
+| `tokio` | off | The RASP context follows a request through every `.await` |
+| `tower` | off | `rasp::tower::RaspLayer` for axum, tonic and hyper |
+| `reqwest` | off | A reqwest client that runs the outbound and SSRF checks |

@@ -1,6 +1,6 @@
 {
   "name": "shield360",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "homepage": "https://github.com/ThinkfleetAI/shield360-js#readme",
   "bugs": {
     "url": "https://github.com/ThinkfleetAI/shield360-js/issues",
@@ -36,6 +36,18 @@
     "./agents": {
       "types": "./dist/agents/index.d.ts",
       "default": "./dist/agents/index.js"
+    },
+    "./lambda": {
+      "types": "./dist/lambda/index.d.ts",
+      "default": "./dist/lambda/index.js"
+    },
+    "./lambda/handler": {
+      "types": "./dist/lambda/handler.d.ts",
+      "default": "./dist/lambda/handler.js"
+    },
+    "./workers": {
+      "types": "./dist/workers/index.d.ts",
+      "default": "./dist/workers/index.js"
     }
   },
   "typesVersions": {
@@ -45,6 +57,15 @@
       ],
       "register": [
         "./dist/register.d.ts"
+      ],
+      "lambda": [
+        "./dist/lambda/index.d.ts"
+      ],
+      "lambda/handler": [
+        "./dist/lambda/handler.d.ts"
+      ],
+      "workers": [
+        "./dist/workers/index.d.ts"
       ]
     }
   },

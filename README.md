@@ -226,6 +226,39 @@ Limits:
 | `SHIELD360_ESM_HOOK` | on | `off` skips the ES module loader hook. New for the zero-code entry. |
 | `SHIELD360_GUARDS` | unset (no guards) | Guards on LLM calls, such as `prompt_injection:block,pii:warn`. |
 
+## Serverless and edge runtimes
+
+### AWS Lambda - `shield360/lambda`
+
+`wrapHandler` traces each invocation as a `faas` span (cold start, trigger, invocation ID, function ARN) and flushes traces, metrics and logs before the invocation returns. The flush waits at most `SHIELD360_LAMBDA_FLUSH_TIMEOUT_MS` (2000 ms by default) and never past the invocation's deadline.
+
+```typescript
+import { wrapHandler } from 'shield360/lambda';
+
+export const handler = wrapHandler(async (event, context) => {
+  return { statusCode: 200, body: 'ok' };
+});
+```
+
+Start Shield360 before the function's own imports so provider SDKs are instrumented: set `NODE_OPTIONS=--require shield360/register`, or use the Shield360 Lambda layer, which wraps the handler with no code changes. See [AWS Lambda](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/aws-lambda.mdx).
+
+### Cloudflare Workers - `shield360/workers`
+
+A dependency-free wrapper (about 8 KB minified) that sends spans over OTLP/HTTP with `fetch`, after the response, through `ctx.waitUntil`. It uses no Node.js APIs.
+
+```typescript
+import { withShield360, span, tracedFetch } from 'shield360/workers';
+
+export default withShield360({
+  async fetch(request, env, ctx) {
+    const upstream = await tracedFetch(ctx, 'https://api.example.com/data');
+    return span(ctx, 'render', async () => new Response(await upstream.text()));
+  },
+});
+```
+
+It reads the `SHIELD360_URL` and `SHIELD360_API_KEY` bindings (or `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`). See [Cloudflare Workers](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/cloudflare-workers.mdx) and, for Next.js on Vercel, [Vercel](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/vercel.mdx).
+
 ## Configuration
 
 ### Observability - `Shield360.init()`
@@ -260,6 +293,8 @@ Every GenAI span (one with `gen_ai.operation.name`) records where your code made
 | `code.function.name` | Calling function, such as `BillingService.summarise`. Left out for anonymous functions. |
 | `code.file.path` | File path relative to `codeRoot`, the git root or the working directory. No home directory (yours or another user's) or CI workspace prefix is sent. |
 | `code.line.number` | Line of the call. |
+
+The same call site is also recorded on the app's outbound calls: database, HTTP, RPC and messaging client and producer spans. Shield360 uses it to price the costly code patterns `shield360 scan` finds, such as a query inside a loop. Turn just that off with `SHIELD360_CAPTURE_CALL_LOCATION=false`; model calls keep their location.
 
 Frames inside Shield360, OpenTelemetry, `node_modules` and Node internals are skipped. Only names, paths and line numbers are recorded, never argument values or source text. Turn it off with `captureCodeLocation: false` or `SHIELD360_CAPTURE_CODE_LOCATION=false` (`0`, `no` and `off` also work); the init option wins over the environment variable.
 
@@ -483,6 +518,7 @@ With application logs on, `init()` bridges these with no code changes:
 - a JSON line keeps its level (a name or a pino number), `msg` or `message` as the body, `err` or `error` as `exception.*`, and its other fields as attributes;
 - a plain line is `info` on stdout and `error` on stderr;
 - a line split across writes is joined first.
+- a line that continues the one before it in the same write (indented, or closing a bracket still open) joins it, so one `console.log` of an object or one stack trace is one record, not one per line.
 
 The scope is `stdout` or `stderr`. It replaces the console, winston and pino bridges, which write to the same streams, so each line is sent once. `Shield360.releaseStdio()` stops it.
 
@@ -525,6 +561,16 @@ When `init` is given `guards` and a Shield360 URL and API key (`shield360Url` / 
 - **A heartbeat:** once at start and then about every 5 minutes (jittered), the app's service name, each guard kind's mode (`off`, `warn` or `block`), whether prompt-injection checks are on, and the SDK's name and version. No text, host or user. Shield360 uses it to show that the app's guards are on even when they had nothing to stop, for example for the [Secured by Shield360 badge](https://shield360.ai).
 
 Both go through the same background queue, never throw and never delay a call. Turn the heartbeat off with `guardHeartbeat: false` in `init`, or `SHIELD360_GUARD_HEARTBEAT=false`.
+
+## Runtime packages
+
+With a Shield360 URL and API key, the SDK reports the packages the process runs so Shield360 can match them against vulnerability data (Security → Code, as a "runtime" target): the Node.js version, every npm package loaded through `require` so far, and the app's direct dependencies as installed (from the working directory's and the entry script's `package.json`). Each is a name and a version, read from the package's own `package.json`; no path, file or other field leaves the process, and at most 500 are sent.
+
+The report goes to `/api/guard/events` with the app's API key, about 15 seconds after start (so packages required lazily are in it) and then once a day, off the call path. It never throws and never delays a call; a report that cannot be delivered is dropped. When runtime protection is on it uses this report instead of sending its own.
+
+ES modules loaded with `import` are not in `require.cache`, so an app that only imports ESM packages reports its direct dependencies and the CommonJS packages it loads, not every transitive ES module.
+
+Turn it off with `runtimePackages: false` in `init`, or `SHIELD360_RUNTIME_PACKAGES=off`.
 
 ## Runtime protection (RASP)
 

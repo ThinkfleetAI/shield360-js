@@ -1,0 +1,175 @@
+---
+title: "AWS Lambda: trace Node.js and Python functions"
+sidebarTitle: "AWS Lambda"
+description: "Send traces, metrics and logs from AWS Lambda functions to Shield360 with the Shield360 layer or a one-line handler wrapper, flushed before each invocation returns."
+---
+
+Shield360 traces each Lambda invocation as one span and flushes everything the invocation recorded before it returns. Telemetry reaches Shield360 even though Lambda freezes the function as soon as the handler returns.
+
+You can add it in two ways:
+
+- **The Shield360 layer** needs no code change. Add the layer and two environment variables, and Shield360 wraps your handler.
+- **The handler wrapper** is one line in your code: `wrapHandler` in Node.js, `@wrap_handler` in Python.
+
+Both record the same span and flush in the same way.
+
+<Info>
+`shield360/lambda` is in the Node.js SDK from version 1.2.4. `shield360.aws_lambda` is in the first Python SDK release after 1.2.0.
+</Info>
+
+## What each invocation records
+
+| Attribute | Value |
+|---|---|
+| `faas.trigger` | `http` (API Gateway, function URLs, ALB), `pubsub` (SQS, SNS, Kinesis, MSK), `datasource` (S3, DynamoDB), `timer` (EventBridge schedules), or `other` |
+| `faas.coldstart` | `true` for the first invocation in a new execution environment. Provisioned concurrency counts as warm. |
+| `faas.invocation_id` | The request ID |
+| `faas.name`, `faas.version`, `faas.max_memory` | The function's name, version and memory limit in bytes |
+| `cloud.provider`, `cloud.platform`, `cloud.region`, `cloud.account.id` | `aws`, `aws_lambda`, the region and the account ID |
+| `cloud.resource_id`, `aws.lambda.invoked_arn` | The function's ARN, and the ARN it was called through (with an alias or version) |
+
+HTTP invocations are named by route (`POST /orders`) and also record `http.request.method`, `url.path`, `http.route` and `http.response.status_code`. A `5xx` response or an exception marks the span as an error. When the caller sends a W3C `traceparent` header, the invocation joins the caller's trace.
+
+Everything the handler does appears inside that span: LLM calls, outgoing HTTP, AWS SDK calls and database queries.
+
+## Configure
+
+Set these environment variables on the function:
+
+```bash
+SHIELD360_URL=https://app.shield360.ai
+SHIELD360_API_KEY=<your API key>          # Settings → Developer → API keys
+OTEL_SERVICE_NAME=checkout                # optional: defaults to the function name
+```
+
+You can use an OTLP collector of your own instead, with `OTEL_EXPORTER_OTLP_ENDPOINT` and `OTEL_EXPORTER_OTLP_HEADERS`. The other [SDK settings](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/configuration.mdx) work too.
+
+<Warning>
+Keep the API key in AWS Secrets Manager or an encrypted environment variable, not in your source code or template.
+</Warning>
+
+## Use the Shield360 layer
+
+<Steps>
+  <Step title="Add the layer">
+    Add the Shield360 layer that matches your runtime: `shield360-nodejs` for every Node.js runtime, or `shield360-python<version>-<arch>` for Python (for example `shield360-python312-arm64`). Ask Shield360 support for the layer ARN in your region, or [host the layer in your own account](#host-the-layer-in-your-own-account).
+  </Step>
+  <Step title="Turn on the wrapper">
+    Set one more environment variable:
+
+    ```bash
+    AWS_LAMBDA_EXEC_WRAPPER=/opt/shield360-wrapper
+    ```
+
+    Leave the function's **Handler** setting as it is. The wrapper saves it in `SHIELD360_LAMBDA_HANDLER` and points Lambda at Shield360's handler. Shield360's handler starts Shield360, loads your handler, and wraps it.
+  </Step>
+  <Step title="Invoke the function">
+    The first invocation appears in Shield360 under the service name, marked as a cold start.
+  </Step>
+</Steps>
+
+Shield360 starts before your function's code is loaded, so the provider SDKs your code imports (OpenAI, Anthropic, Bedrock and the others) are instrumented.
+
+If you can't use an exec wrapper, set the handler yourself:
+
+| Runtime | Handler | `SHIELD360_LAMBDA_HANDLER` |
+|---|---|---|
+| Node.js | `/opt/nodejs/node_modules/shield360/dist/lambda/handler.handler` | Your handler, for example `index.handler` |
+| Python | `shield360.aws_lambda.handler` | Your handler, for example `app.handler` |
+
+### Example: AWS SAM
+
+```yaml
+Resources:
+  Checkout:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: nodejs22.x
+      Handler: index.handler
+      Layers:
+        - !Ref Shield360LayerArn
+      Environment:
+        Variables:
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/shield360-wrapper
+          SHIELD360_URL: https://app.shield360.ai
+          SHIELD360_API_KEY: '{{resolve:secretsmanager:shield360:SecretString:apiKey}}'
+```
+
+## Use the handler wrapper
+
+Install the SDK with the function's code, then wrap the handler.
+
+<Tabs>
+  <Tab title="Node.js">
+    ```bash
+    npm install shield360
+    ```
+
+    ```typescript
+    import { wrapHandler } from 'shield360/lambda';
+
+    export const handler = wrapHandler(async (event, context) => {
+      return { statusCode: 200, body: 'ok' };
+    });
+    ```
+
+    Async and callback-style handlers both work. The wrapped handler is always async.
+
+    If Shield360 hasn't started yet, `wrapHandler` starts it from the environment. Modules imported before that point aren't instrumented, so also set `NODE_OPTIONS=--require shield360/register` on the function. Shield360 then starts before your code loads. If your code calls `Shield360.init()` itself, pass `{ autoInit: false }`.
+
+    If you bundle the function with esbuild or webpack, keep `shield360` and your LLM client (`openai`, `@anthropic-ai/sdk`) out of the bundle so their instrumentation can attach.
+  </Tab>
+  <Tab title="Python">
+    ```bash
+    pip install shield360 -t package/
+    ```
+
+    ```python
+    from shield360.aws_lambda import wrap_handler
+
+    @wrap_handler
+    def handler(event, context):
+        return {"statusCode": 200, "body": "ok"}
+    ```
+
+    If Shield360 hasn't started yet, `@wrap_handler` starts it from the environment. Libraries the module imported before the decorator ran aren't instrumented, so import `shield360.aws_lambda` and decorate before importing `openai` or `anthropic`, or use the layer. If your code calls `shield360.init()` itself, use `@wrap_handler(auto_init=False)`.
+  </Tab>
+</Tabs>
+
+## Flushing
+
+After each invocation, Shield360 flushes traces, metrics and logs before the handler returns. The flush waits at most `SHIELD360_LAMBDA_FLUSH_TIMEOUT_MS` milliseconds (2000 by default). It never runs past the invocation's own deadline, so a collector that can't be reached can't make the function time out. Spans that don't fit in that window stay queued and go out with a later invocation's flush. If Lambda shuts the execution environment down first, they are lost.
+
+The flush adds latency to each invocation: usually a few milliseconds when the collector is in the same region, and up to the timeout when it doesn't answer.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `SHIELD360_LAMBDA_FLUSH_TIMEOUT_MS` | `2000` | The longest the flush waits after each invocation |
+| `SHIELD360_LAMBDA_HANDLER` | set by the wrapper | Your own handler, for the layer's handler to load |
+| `SHIELD360_LAMBDA_EAGER` | `true` | `false` loads your handler on the first invocation instead of during the init phase |
+
+## Host the layer in your own account
+
+Shield360 publishes the layers; ask [support@shield360.ai](mailto:support@shield360.ai) for the ARN in your region. To keep a copy in your own AWS account (for example for a region without a published layer, or to pin a version), ask support for the layer zip, then publish it:
+
+```bash
+aws lambda publish-layer-version --layer-name shield360-nodejs \
+  --zip-file fileb://shield360-nodejs.zip \
+  --compatible-runtimes nodejs20.x nodejs22.x nodejs24.x \
+  --compatible-architectures x86_64 arm64
+```
+
+The Python layers leave out `boto3` and `botocore`, because every Lambda Python runtime already includes them.
+
+## Limits
+
+- **Node.js and Python only.** Lambda wrappers for .NET and Go aren't available yet. In those runtimes, call the SDK's `init` and flush its providers at the end of the handler.
+- **Lambda response streaming** (`awslambda.streamifyResponse`) is not wrapped. The span would end before the stream does.
+- **Lambda extensions** aren't used. The flush runs inside the invocation, which keeps the layer small, but adds the flush time to each invocation's duration.
+
+## Next steps
+
+- [Vercel and Next.js](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/vercel.mdx)
+- [Cloudflare Workers](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/cloudflare-workers.mdx)
+- [Zero-code setup](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/zero-code-setup.mdx)
+- [SDK configuration](https://github.com/ThinkfleetAI/shield360-js/blob/main/docs/configuration.mdx)

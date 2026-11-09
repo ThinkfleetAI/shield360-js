@@ -1,0 +1,34 @@
+---
+title: 'PHP SDK Overview'
+sidebarTitle: 'PHP SDK Overview'
+icon: 'php'
+description: 'Trace export, application logs, feature flags and runtime protection for PHP 8.1+ apps.'
+---
+
+The Shield360 PHP SDK exports traces, sends application logs through a Monolog handler, evaluates feature flags, and adds runtime application self-protection (RASP) with request capture for PSR-15 and plain PHP. LLM instrumentation is not part of it yet.
+
+It needs PHP 8.1 or later with `ext-json` and `ext-mbstring`. `ext-sodium` verifies the signed RASP config; without it, RASP runs its built-in defaults in monitor mode.
+
+## Install
+
+<Warning>
+The PHP SDK is not on Packagist yet, so `composer require shield360/sdk` does not resolve. To get access, [contact us](https://shield360.ai/demo).
+</Warning>
+
+To export traces, also install the OpenTelemetry SDK, the OTLP exporter and a PSR-18 HTTP client:
+
+```bash
+composer require open-telemetry/sdk open-telemetry/exporter-otlp guzzlehttp/guzzle
+```
+
+RASP works without those packages. When the OpenTelemetry SDK is missing, `init()` falls back to no telemetry.
+
+## What it covers
+
+| Feature | Available |
+|---|---|
+| Trace export over OTLP | Yes |
+| Application logs and PHP errors | Yes |
+| Runtime protection, custom rules and passive IAST | Yes |
+| Feature flags | Yes |
+| LLM instrumentation | Not yet |
