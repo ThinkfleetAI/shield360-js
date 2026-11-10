@@ -12,6 +12,8 @@ export { agentVerifier, readPassport } from './verifier';
 export type { AgentVerifier } from './verifier';
 export { MemoryReplayStore } from './replay';
 export { DIRECTORY_PATH, jwkThumbprint, WEB_BOT_AUTH_TAG } from './web-bot-auth';
+export { agentSigner } from './signer';
+export type { AgentSigner, AgentSignerOptions, SignableRequest, SignerInfo } from './signer';
 export type { MemoryReplayStoreOptions } from './replay';
 export { AGENT_HEADER, ASSURANCE_LEVELS, DEFAULT_ISSUERS, DEFAULT_POLICY, PASSPORT_TYP, assuranceRank } from './types';
 export type {

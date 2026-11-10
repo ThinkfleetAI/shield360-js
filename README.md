@@ -499,6 +499,27 @@ On a call without a passport, the verifier also checks a [Web Bot Auth](https://
 
 The verifier can only check what the signature covers when it can see the request. Pass the `Request` or the Node request, or pass `method` and `route` when you check headers alone.
 
+### Sign your agent's requests - `agentSigner`
+
+Your own agents can sign the requests they send with Web Bot Auth, so websites and Cloudflare can check that they come from your organization. First set a signer name for the environment in the console (**Agent authorization → Request signing**). Then:
+
+```typescript
+import { agentSigner } from 'shield360/agents';
+
+const signer = agentSigner({ apiKey: process.env.SHIELD360_API_KEY! });
+
+const res = await signer.fetch('https://api.example.com/v1/orders', { method: 'POST', body });
+// or add the headers to your own HTTP client:
+const headers = await signer.headers('https://api.example.com/v1/orders');
+```
+
+- **The key stays with the agent.** On first use the signer creates an Ed25519 key in `~/.shield360/agent-signing-key.json` (mode `0600`). To give replicas of one agent the same key from your secrets manager, pass `privateKey` (PKCS#8 PEM or an Ed25519 JWK) or set `SHIELD360_AGENT_SIGNING_KEY`. Only the public key is sent to Shield360.
+- **Registration.** The signer registers the public key with the environment's API key. It sends its own signature over your key directory with it, and repeats that every six hours so the key stays published.
+- **The signature.** Each request gets `Signature-Agent`, `Signature-Input` and `Signature` headers, in the form Cloudflare verifies. The signature covers the target host and `Signature-Agent`, is valid for one minute and has a fresh nonce.
+- **Signing never breaks a request.** If the signer cannot be set up (no signer name, an invalid API key, the network), requests go out unsigned and a warning is logged once.
+
+Call `signer.close()` on shutdown to stop the refresh timer.
+
 ## Application logs
 
 Off by default. Set `SHIELD360_CAPTURE_LOGS=true` (or the init option) to send the application's own log records to Shield360, on the same endpoint and key as traces. `SHIELD360_LOG_LEVEL` sets the lowest level sent (`info` by default; `trace`, `debug`, `info`, `warn`, `error`, `fatal`). Records carry the active trace and span ids, `service.name` and `deployment.environment`; credentials and opaque tokens in messages and attributes are masked before they leave the process; at most 500 records a second per bridge are sent, in batches, and a failure to send never reaches the application.
