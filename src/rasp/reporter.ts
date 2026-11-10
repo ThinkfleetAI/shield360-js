@@ -6,6 +6,7 @@
  * (attack, rule, sink, route, decision) within 10 s fold into one more
  * event carrying `shield360.rasp.count`. Events name locations, never values.
  */
+import { traceAttrs, withoutTrace } from '../trace-context';
 import * as fs from 'fs';
 import { hostname } from 'os';
 import { join, sep } from 'path';
@@ -70,6 +71,11 @@ export class RaspReporter {
    * for callers that count repeats themselves (passive IAST).
    */
   add(event: RaspEvent, foldKey: string): boolean {
+    // SHIELD: security event trace ids — read now, while the request's span is active.
+    if (event.name === RASP_EVENT && !event.attrs['shield360.rasp.trace_id']) {
+      const ids = traceAttrs('shield360.rasp.');
+      if (ids['shield360.rasp.trace_id']) event = { ...event, attrs: { ...event.attrs, ...ids } };
+    }
     const now = this.now();
     this.closeFolds(now);
     if (!foldKey) return this.enqueue(event, now);
@@ -99,7 +105,7 @@ export class RaspReporter {
       this.folds.delete(k);
       if (f.extra > 0) {
         const time = new Date(Number.isFinite(now) ? now : this.now()).toISOString();
-        this.enqueue({ ...f.event, time, attrs: { ...f.event.attrs, 'shield360.rasp.count': String(f.extra) } }, Number.isFinite(now) ? now : this.now());
+        this.enqueue({ ...f.event, time, attrs: { ...withoutTrace(f.event.attrs, 'shield360.rasp.'), 'shield360.rasp.count': String(f.extra) } }, Number.isFinite(now) ? now : this.now());
       }
     }
   }

@@ -14,6 +14,7 @@
  * Must stay in sync with: sdk/python/src/shield360/ai_security/_events.py
  */
 
+import { traceAttrs, withoutTrace } from '../trace-context';
 import { randomUUID } from 'crypto';
 import { hostname } from 'os';
 import { getCustomer } from '../customer';
@@ -99,6 +100,8 @@ export class EventReporter implements EventSink {
       const seen = this.recent.get(key);
       if (seen && at - seen.at < DEDUPE_MS && this.queue.includes(seen)) {
         seen.wire.attrs['shield360.ai_security.count'] = Number(seen.wire.attrs['shield360.ai_security.count'] || 1) + (event.count || 1);
+        // SHIELD: a merged event stands for several requests, so it names none.
+        seen.wire.attrs = withoutTrace(seen.wire.attrs, 'shield360.ai_security.');
         return;
       }
       if (this.queue.length >= MAX_QUEUED) return;
@@ -110,6 +113,9 @@ export class EventReporter implements EventSink {
         'shield360.ai_security.mode': event.mode,
         'shield360.ai_security.action': event.action,
         'shield360.ai_security.count': event.count || 1,
+        // SHIELD: security event trace ids — the request this check ran in:
+        // 'shield360.ai_security.trace_id' and 'shield360.ai_security.span_id'.
+        ...traceAttrs('shield360.ai_security.'),
       };
       const put = (k: string, v: unknown) => {
         if (v === undefined || v === null || v === '') return;

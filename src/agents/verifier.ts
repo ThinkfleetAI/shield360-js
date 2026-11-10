@@ -15,6 +15,7 @@ import { assuranceOf, audienceMatches, fetchJson, KeyCache, normaliseIssuer, par
 import { PolicySource } from './policy';
 import { MemoryReplayStore } from './replay';
 import { DecisionReporter } from './report';
+import { DirectoryCache, signedRequest, verifyWebBotAuth } from './web-bot-auth';
 import {
   AGENT_HEADER,
   AgentCheck,
@@ -107,6 +108,8 @@ export function agentVerifier(options: AgentVerifierOptions): AgentVerifier {
   const policies = new PolicySource(options.policy, options.policyFrom, getFetch, now);
   const reporter = options.report?.apiKey ? new DecisionReporter(options.report, getFetch) : undefined;
   const onlineFailure = options.onlineFailure ?? 'allow';
+  const webBotAuth = options.webBotAuth !== false;
+  const directories = new DirectoryCache(getFetch, now);
 
   type OnlineAnswer = { unreachable: true } | { invalid: string } | { valid: true; assurance?: Assurance; note?: string };
 
@@ -214,18 +217,69 @@ export function agentVerifier(options: AgentVerifierOptions): AgentVerifier {
     const finish = (r: Omit<AgentCheck, 'blocked'>): AgentCheck => ({ ...r, blocked: r.decision === 'deny' && policy.mode === 'enforce' });
     const found = readPassport(input);
 
-    if (found.multiple) return finish({ status: 'invalid', decision: 'deny', reason: 'malformed', scopes: [] });
-    if (!found.token) return finish({ status: 'absent', decision: policy.requireAgent ? 'deny' : 'allow', reason: 'absent', scopes: [] });
+    if (found.multiple) return finish({ status: 'invalid', decision: 'deny', reason: 'malformed', via: 'passport', scopes: [] });
+    const absent = (reason: string) => finish({ status: 'absent', decision: policy.requireAgent ? 'deny' : 'allow', reason, scopes: [] });
+    if (!found.token) return webBotAuth && input !== null && typeof input === 'object' ? evaluateSigned(input, opts, policy, finish, absent) : absent('absent');
 
     const v = await verify(found.token, Boolean(opts.online || policy.online));
-    if (!('ok' in v)) return finish({ status: 'invalid', decision: 'deny', reason: v.reason, scopes: [], ...identity(v.passport) });
+    if (!('ok' in v)) return finish({ status: 'invalid', decision: 'deny', reason: v.reason, via: 'passport', scopes: [], ...identity(v.passport) });
 
-    const base = { status: 'verified' as const, scopes: [], ...identity(v.ok, v.assurance) };
-    if (!operatorAllowed(policy, v.ok.claims.operator)) return finish({ ...base, decision: 'deny', reason: 'operator_not_allowed' });
-    if (policy.requireOnBehalfOf && !v.ok.claims.act) return finish({ ...base, decision: 'deny', reason: 'on_behalf_of_required' });
-    const need = assuranceRank(policy.minAssurance);
-    if (need > 0 && assuranceRank(base.onBehalfOf?.assurance) < need) return finish({ ...base, decision: 'deny', reason: 'assurance_too_low' });
+    const base = { status: 'verified' as const, via: 'passport' as const, scopes: [], ...identity(v.ok, v.assurance) };
+    const denied = policyDenial(policy, v.ok.claims.operator, Boolean(v.ok.claims.act), base.onBehalfOf?.assurance);
+    if (denied) return finish({ ...base, decision: 'deny', reason: denied });
     return finish({ ...base, decision: 'allow', ...(v.note ? { reason: v.note } : {}) });
+  }
+
+  /** The receiver policy's verdict on a verified caller: the reason it is denied, if it is. */
+  function policyDenial(policy: AgentPolicy, operator: { id: string; domain: string | null }, actsForPerson: boolean, assurance: Assurance | undefined): AgentCheckReason | undefined {
+    if (!operatorAllowed(policy, operator)) return 'operator_not_allowed';
+    if (policy.requireOnBehalfOf && !actsForPerson) return 'on_behalf_of_required';
+    const need = assuranceRank(policy.minAssurance);
+    if (need > 0 && assuranceRank(assurance) < need) return 'assurance_too_low';
+    return undefined;
+  }
+
+  /**
+   * A call without a passport, checked for a Web Bot Auth signature. The
+   * signer's host stands for both the agent and its operator, so the
+   * operators list allows or denies signers too. A signature names no person,
+   * so a policy that wants one denies it. A signer whose key directory cannot
+   * be reached is treated as no signature at all: its outage never denies a
+   * call that would have been allowed without one.
+   */
+  async function evaluateSigned(
+    input: AgentCheckInput,
+    opts: AgentCheckOptions,
+    policy: AgentPolicy,
+    finish: (r: Omit<AgentCheck, 'blocked'>) => AgentCheck,
+    absent: (reason: string) => AgentCheck,
+  ): Promise<AgentCheck> {
+    const r = await verifyWebBotAuth(signedRequest(input, opts), { audiences, directories, replay, skewSeconds: skew, now });
+    if (r.status === 'absent') return absent('absent');
+    if (r.status === 'invalid') {
+      if (r.reason === 'directory_unreachable') return absent('directory_unreachable');
+      const who = r.host ? { operator: { id: r.host, name: r.host, domain: r.host } } : {};
+      return finish({ status: 'invalid', decision: 'deny', reason: r.reason, via: 'web-bot-auth', scopes: [], ...who });
+    }
+    const s = r.signer;
+    let origin: string | undefined;
+    try {
+      origin = new URL(s.agent).origin;
+    } catch {
+      origin = undefined;
+    }
+    const base = {
+      status: 'verified' as const,
+      via: 'web-bot-auth' as const,
+      scopes: [],
+      agent: { id: s.host, name: s.host },
+      operator: { id: s.host, name: s.host, domain: s.host },
+      ...(origin ? { issuer: origin } : {}),
+      signature: { agent: s.agent, keyId: s.keyId },
+      expiresAt: new Date(s.expires * 1000).toISOString(),
+    };
+    const denied = policyDenial(policy, base.operator, false, undefined);
+    return finish({ ...base, decision: denied ? 'deny' : 'allow', ...(denied ? { reason: denied } : {}) });
   }
 
   function report(result: AgentCheck, opts: AgentCheckOptions): void {

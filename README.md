@@ -493,6 +493,12 @@ export async function POST(request: Request) {
 
 Call `await verifier.close()` on shutdown to send queued reports.
 
+#### Agents that sign with Web Bot Auth
+
+On a call without a passport, the verifier also checks a [Web Bot Auth](https://datatracker.ietf.org/wg/webbotauth/about/) signature: the `Signature`, `Signature-Input` and `Signature-Agent` headers that Cloudflare's signed agents send. It fetches the signer's key directory, accepts Ed25519 keys only, and requires the signature to cover your host and the `Signature-Agent` header. A verified signature gives `status: 'verified'` and `via: 'web-bot-auth'`, with the signer's host as `agent` and `operator`. Your `operators` list therefore applies to signers by host name. Pass `webBotAuth: false` to ignore signatures.
+
+The verifier can only check what the signature covers when it can see the request. Pass the `Request` or the Node request, or pass `method` and `route` when you check headers alone.
+
 ## Application logs
 
 Off by default. Set `SHIELD360_CAPTURE_LOGS=true` (or the init option) to send the application's own log records to Shield360, on the same endpoint and key as traces. `SHIELD360_LOG_LEVEL` sets the lowest level sent (`info` by default; `trace`, `debug`, `info`, `warn`, `error`, `fatal`). Records carry the active trace and span ids, `service.name` and `deployment.environment`; credentials and opaque tokens in messages and attributes are masked before they leave the process; at most 500 records a second per bridge are sent, in batches, and a failure to send never reaches the application.

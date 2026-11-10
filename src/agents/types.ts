@@ -82,7 +82,11 @@ export type AgentCheckReason =
   | 'absent'
   | 'operator_not_allowed'
   | 'on_behalf_of_required'
-  | 'assurance_too_low';
+  | 'assurance_too_low'
+  // Web Bot Auth signatures (a call without a passport):
+  | 'unsupported_component'
+  | 'untrusted_signature_agent'
+  | 'directory_unreachable';
 
 export type AgentIdentity = {
   id: string;
@@ -115,6 +119,14 @@ export type AgentCheck = {
   /** decision === "deny" && mode === "enforce". */
   blocked: boolean;
   reason?: AgentCheckReason | string;
+  /**
+   * What identified the caller: its Shield360 passport, or a Web Bot Auth
+   * signature (then agent and operator are the signer's host, and no person
+   * is named). Absent when the call carried neither.
+   */
+  via?: 'passport' | 'web-bot-auth';
+  /** The Web Bot Auth signature that verified: the signer's Signature-Agent URL and key thumbprint. */
+  signature?: { agent: string; keyId: string };
   agent?: AgentIdentity;
   operator?: AgentOperator;
   /** id is the pairwise person id (act.sub): stable per receiver, never the person's id or email. */
@@ -159,6 +171,13 @@ export type AgentVerifierOptions = {
    * the passport was already verified offline.
    */
   onlineFailure?: 'allow' | 'deny';
+  /**
+   * Check Web Bot Auth signatures (RFC 9421, as Cloudflare's signed agents
+   * send them) on calls without a passport. Default true. The signer's key
+   * directory is fetched from the https URL its Signature-Agent header names
+   * (public host names only; cached an hour).
+   */
+  webBotAuth?: boolean;
   fetch?: typeof fetch;
   /** Milliseconds since the epoch; for tests. */
   clock?: () => number;
